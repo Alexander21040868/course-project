@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeQuest — Приключение</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="toast-container" id="toasts"></div>
+
+    <div class="app">
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">&lt;CQ/&gt;</div>
+
+            <div class="char-card">
+                <div class="avatar" id="avatar">⚔</div>
+                <div class="char-name" id="charName">...</div>
+                <div class="char-role" id="charRole">...</div>
+                <div class="xp-section">
+                    <div class="xp-label">
+                        <span>XP</span>
+                        <span id="xpText">0</span>
+                    </div>
+                    <div class="xp-bar">
+                        <div class="xp-fill" id="xpFill" style="width:0%"></div>
+                    </div>
+                    <span class="level-badge" id="levelBadge">LVL 1</span>
+                </div>
+            </div>
+
+            <nav class="nav">
+                <button class="nav-item active" data-view="quests">
+                    <span class="nav-icon">🗺</span> Подземелья
+                </button>
+                <button class="nav-item" data-view="achievements">
+                    <span class="nav-icon">🏆</span> Достижения
+                </button>
+                <div class="nav-divider"></div>
+                <button class="nav-item" data-view="admin" id="adminNav" style="display:none">
+                    <span class="nav-icon">⚙</span> Управление
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button class="logout-btn" id="logoutBtn">↩ Покинуть игру</button>
+            </div>
+        </aside>
+
+        <!-- TOP BAR -->
+        <header class="topbar">
+            <div class="topbar-title" id="viewTitle">Карта подземелий</div>
+            <div class="topbar-stats">
+                <div class="stat">⚔ Решено: <span class="val" id="solvedStat">0</span></div>
+                <div class="stat">✦ Уровень: <span class="val" id="levelStat">1</span></div>
+            </div>
+        </header>
+
+        <!-- MAIN -->
+        <main class="main-content">
+
+            <!-- QUESTS VIEW (lessons list) -->
+            <div class="view active" id="view-quests">
+                <div class="quest-map" id="questMap"></div>
+            </div>
+
+            <!-- LESSON VIEW -->
+            <div class="view" id="view-lesson">
+                <button class="back-btn" id="backToQuests">← Назад к карте</button>
+                <div class="lesson-header">
+                    <h2 id="lessonTitle"></h2>
+                </div>
+                <div class="lesson-content" id="lessonContent"></div>
+                <h3 style="font-family:var(--pixel);font-size:11px;margin-bottom:16px;">
+                    ⚔ Задачи подземелья
+                </h3>
+                <div class="task-list" id="taskList"></div>
+            </div>
+
+            <!-- TASK VIEW -->
+            <div class="view" id="view-task">
+                <button class="back-btn" id="backToLesson">← Назад к уроку</button>
+                <div class="task-header">
+                    <div>
+                        <h2 id="taskTitle"></h2>
+                        <span class="task-diff" id="taskDiff"></span>
+                    </div>
+                    <span class="task-xp" id="taskXp"></span>
+                </div>
+                <div class="task-desc" id="taskDesc"></div>
+                <details class="hint-box" id="hintBox" style="display:none">
+                    <summary>💡 Подсказка</summary>
+                    <p id="hintText"></p>
+                </details>
+                <div class="editor-wrapper">
+                    <div class="editor-header">
+                        <span class="file-name">📄 solution.c</span>
+                        <span>C language</span>
+                    </div>
+                    <textarea class="code-editor" id="codeEditor"
+                              spellcheck="false"
+                              placeholder="// Напишите ваш код на C здесь..."></textarea>
+                </div>
+                <div class="submit-row">
+                    <button class="btn-submit" id="submitBtn">▶ Отправить решение</button>
+                    <span id="submitSpinner" style="display:none"><span class="spinner"></span></span>
+                </div>
+                <div class="result-panel" id="resultPanel">
+                    <div class="result-header" id="resultHeader"></div>
+                    <div class="result-body" id="resultBody"></div>
+                    <div class="result-xp" id="resultXp"></div>
+                </div>
+            </div>
+
+            <!-- ACHIEVEMENTS VIEW -->
+            <div class="view" id="view-achievements">
+                <div class="achievements-grid" id="achGrid"></div>
+            </div>
+
+            <!-- ADMIN VIEW -->
+            <div class="view" id="view-admin">
+                <div class="admin-section">
+                    <h3>📖 Создать урок</h3>
+                    <form class="admin-form" id="createLessonForm">
+                        <div>
+                            <label>Название</label>
+                            <input type="text" name="title" required placeholder="Введение в C">
+                        </div>
+                        <div>
+                            <label>Описание</label>
+                            <input type="text" name="description" placeholder="Краткое описание урока">
+                        </div>
+                        <div>
+                            <label>Содержание (HTML)</label>
+                            <textarea name="content" placeholder="<p>Теория урока...</p>"></textarea>
+                        </div>
+                        <div>
+                            <label>Порядковый номер</label>
+                            <input type="number" name="orderIndex" value="0">
+                        </div>
+                        <button type="submit" class="btn-admin">Создать урок</button>
+                    </form>
+                </div>
+
+                <div class="admin-section">
+                    <h3>⚔ Создать задачу</h3>
+                    <form class="admin-form" id="createTaskForm">
+                        <div>
+                            <label>ID Урока</label>
+                            <input type="number" name="lessonId" required placeholder="1">
+                        </div>
+                        <div>
+                            <label>Название</label>
+                            <input type="text" name="title" required placeholder="Hello World">
+                        </div>
+                        <div>
+                            <label>Описание</label>
+                            <textarea name="description" placeholder="Описание задачи..."></textarea>
+                        </div>
+                        <div>
+                            <label>Сложность</label>
+                            <select name="difficulty">
+                                <option value="EASY">Лёгкая</option>
+                                <option value="MEDIUM">Средняя</option>
+                                <option value="HARD">Сложная</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Награда XP</label>
+                            <input type="number" name="xpReward" value="10">
+                        </div>
+                        <div>
+                            <label>Шаблон кода</label>
+                            <textarea name="templateCode" placeholder="#include <stdio.h>&#10;&#10;int main() {&#10;    // ваш код&#10;    return 0;&#10;}"></textarea>
+                        </div>
+                        <div>
+                            <label>Ожидаемый вывод</label>
+                            <input type="text" name="expectedOutput" placeholder="Hello, World!">
+                        </div>
+                        <div>
+                            <label>Подсказка</label>
+                            <input type="text" name="hints" placeholder="Используйте printf()">
+                        </div>
+                        <div>
+                            <label>Порядковый номер</label>
+                            <input type="number" name="orderIndex" value="0">
+                        </div>
+                        <button type="submit" class="btn-admin">Создать задачу</button>
+                    </form>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+package org.example.service;
+
+import org.example.dto.AchievementDto;
+import org.example.entity.*;
+import org.example.repository.*;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class GamificationService {
+
+    private final UserRepository userRepo;
+    private final AchievementRepository achievementRepo;
+    private final UserAchievementRepository userAchievementRepo;
+    private final SubmissionRepository submissionRepo;
+
+    public GamificationService(UserRepository userRepo,
+                               AchievementRepository achievementRepo,
+                               UserAchievementRepository userAchievementRepo,
+                               SubmissionRepository submissionRepo) {
+        this.userRepo = userRepo;
+        this.achievementRepo = achievementRepo;
+        this.userAchievementRepo = userAchievementRepo;
+        this.submissionRepo = submissionRepo;
+    }
+
+    @Transactional
+    public int addXp(User user, int amount) {
+        user.setXp(user.getXp() + amount);
+        user.setLevel(calculateLevel(user.getXp()));
+        userRepo.save(user);
+        return amount;
+    }
+
+    @Transactional
+    public List<AchievementDto> checkAndGrantAchievements(User user) {
+        List<AchievementDto> newlyEarned = new ArrayList<>();
+        long solvedCount = submissionRepo.countDistinctTaskByUserIdAndStatus(user.getId(), SubmissionStatus.CORRECT);
+
+        tryGrant(user, "FIRST_BLOOD", solvedCount >= 1, newlyEarned);
+        tryGrant(user, "SOLVER_10", solvedCount >= 10, newlyEarned);
+        tryGrant(user, "SOLVER_50", solvedCount >= 50, newlyEarned);
+
+        return newlyEarned;
+    }
+
+    public int calculateLevel(int xp) {
+        return (int) Math.floor(Math.sqrt(xp / 100.0)) + 1;
+    }
+
+    public int xpToNextLevel(int xp) {
+        int currentLevel = calculateLevel(xp);
+        int nextLevelXp = (currentLevel) * (currentLevel) * 100;
+        return nextLevelXp - xp;
+    }
+
+    public List<AchievementDto> getUserAchievements(Long userId) {
+        return userAchievementRepo.findByUserId(userId).stream()
+                .map(ua -> {
+                    Achievement a = ua.getAchievement();
+                    return new AchievementDto(a.getCode(), a.getName(), a.getDescription(), a.getIcon(), a.getXpReward());
+                })
+                .toList();
+    }
+
+    private void tryGrant(User user, String achievementCode, boolean condition, List<AchievementDto> result) {
+        if (!condition) return;
+
+        achievementRepo.findByCode(achievementCode).ifPresent(achievement -> {
+            if (!userAchievementRepo.existsByUserIdAndAchievementId(user.getId(), achievement.getId())) {
+                UserAchievement ua = new UserAchievement();
+                ua.setUser(user);
+                ua.setAchievement(achievement);
+                userAchievementRepo.save(ua);
+
+                addXp(user, achievement.getXpReward());
+                result.add(new AchievementDto(
+                        achievement.getCode(), achievement.getName(),
+                        achievement.getDescription(), achievement.getIcon(),
+                        achievement.getXpReward()
+                ));
+            }
+        });
+    }
+}

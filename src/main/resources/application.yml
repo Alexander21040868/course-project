@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: codequest
+
+  # H2 для локальной разработки; замените на PostgreSQL для прода
+  datasource:
+    url: jdbc:h2:file:./data/codequest;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: Y29kZXF1ZXN0LXNlY3JldC1rZXktZm9yLWp3dC10b2tlbi1nZW5lcmF0aW9uLTIwMjQ=
+    expiration-ms: 86400000
+
+---
+spring:
+  config:
+    activate:
+      on-profile: postgres
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/codequest
+    driver-class-name: org.postgresql.Driver
+    username: codequest
+    password: codequest
+
+  flyway:
+    locations: classpath:db/migration
