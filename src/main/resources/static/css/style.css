@@ -761,6 +761,27 @@ body::before {
 .mini-bar { height: 6px; background: var(--bg); border-radius: 3px; width: 80px; overflow: hidden; }
 .mini-fill { height: 100%; background: linear-gradient(90deg, var(--green), var(--cyan)); border-radius: 3px; }
 
+/* ── CATALOG ── */
+.search-bar { margin-bottom: 20px; }
+.search-bar input { width: 100%; padding: 12px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-family: var(--mono); font-size: 14px; outline: none; }
+.search-bar input:focus { border-color: var(--cyan); }
+.search-bar input::placeholder { color: var(--text-dim); }
+
+.task-id-badge { font-family: var(--pixel); font-size: 9px; color: var(--purple); background: rgba(168,85,247,.1); padding: 4px 8px; border-radius: 4px; flex-shrink: 0; }
+.task-lesson-tag { font-size: 10px; color: var(--text-dim); margin-left: 8px; }
+
+/* ── LEADERBOARD ── */
+.leaderboard-table { max-width: 700px; }
+.leaderboard-table .top-row td { color: var(--gold); font-weight: 700; }
+
+/* ── STREAK ── */
+.streak-val { color: var(--orange) !important; }
+
+/* ── TASK HISTORY BOX ── */
+.history-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-top: 20px; }
+.history-box summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-dim); }
+.history-box .history-item { margin-top: 8px; }
+
 @media (max-width: 768px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }

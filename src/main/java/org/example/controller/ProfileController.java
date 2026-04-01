@@ -68,7 +68,9 @@ public class ProfileController {
                 user.getUsername(), user.getRole().name(),
                 user.getXp(), user.getLevel(),
                 gamificationService.xpToNextLevel(user.getXp()),
-                solvedCount, totalTasks, user.getCreatedAt(),
+                solvedCount, totalTasks,
+                user.getStreak(), user.getMaxStreak(),
+                user.getCreatedAt(),
                 lessonsProgress, recent, achievements
         ));
     }

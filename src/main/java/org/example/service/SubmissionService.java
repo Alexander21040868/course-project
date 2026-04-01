@@ -80,9 +80,12 @@ public class SubmissionService {
 
         int xpEarned = 0;
         List<AchievementDto> newAchievements = new ArrayList<>();
-        if (correct && !alreadySolved) {
-            xpEarned = gamificationService.addXp(user, task.getXpReward());
-            newAchievements = gamificationService.checkAndGrantAchievements(user);
+        if (correct) {
+            gamificationService.updateStreak(user);
+            if (!alreadySolved) {
+                xpEarned = gamificationService.addXp(user, task.getXpReward());
+                newAchievements = gamificationService.checkAndGrantAchievements(user);
+            }
         }
 
         return new SubmissionResponse(

@@ -11,6 +11,8 @@ public record ProfileDto(
         int xpToNextLevel,
         long solvedCount,
         long totalTasks,
+        int streak,
+        int maxStreak,
         LocalDateTime createdAt,
         List<LessonProgressDto> lessonsProgress,
         List<SubmissionHistoryDto> recentSubmissions,

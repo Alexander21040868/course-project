@@ -30,19 +30,22 @@ public class TaskService {
         this.testCaseRepo = testCaseRepo;
     }
 
+    public List<TaskDto> findAll(String search, String username) {
+        Long userId = resolveUserId(username);
+        List<Task> tasks = (search != null && !search.isBlank())
+                ? taskRepo.findByTitleContainingIgnoreCaseOrderByIdAsc(search)
+                : taskRepo.findAllByOrderByIdAsc();
+        return tasks.stream().map(t -> toDto(t, userId)).toList();
+    }
+
     public List<TaskDto> findByLesson(Long lessonId, String username) {
-        Long userId = userRepo.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"))
-                .getId();
+        Long userId = resolveUserId(username);
         return taskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId).stream()
-                .map(t -> toDto(t, userId))
-                .toList();
+                .map(t -> toDto(t, userId)).toList();
     }
 
     public TaskDto findById(Long id, String username) {
-        Long userId = userRepo.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"))
-                .getId();
+        Long userId = resolveUserId(username);
         Task task = taskRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
         return toDto(task, userId);
@@ -86,6 +89,12 @@ public class TaskService {
         taskRepo.deleteById(id);
     }
 
+    private Long resolveUserId(String username) {
+        return userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"))
+                .getId();
+    }
+
     private TaskDto toDto(Task t, Long userId) {
         boolean solved = userId != null &&
                 submissionRepo.existsByUserIdAndTaskIdAndStatus(userId, t.getId(), SubmissionStatus.CORRECT);
@@ -96,7 +105,8 @@ public class TaskService {
                 .toList();
 
         return new TaskDto(
-                t.getId(), t.getLesson().getId(), t.getTitle(), t.getDescription(),
+                t.getId(), t.getLesson().getId(), t.getLesson().getTitle(),
+                t.getTitle(), t.getDescription(),
                 t.getDifficulty().name(), t.getXpReward(), t.getTemplateCode(),
                 t.getHints(), t.getOrderIndex(), solved, sampleTests
         );

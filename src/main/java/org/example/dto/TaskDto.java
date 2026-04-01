@@ -5,6 +5,7 @@ import java.util.List;
 public record TaskDto(
         Long id,
         Long lessonId,
+        String lessonTitle,
         String title,
         String description,
         String difficulty,

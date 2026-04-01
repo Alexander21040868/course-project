@@ -6,6 +6,7 @@ import org.example.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,6 +46,24 @@ public class GamificationService {
         tryGrant(user, "SOLVER_50", solvedCount >= 50, newlyEarned);
 
         return newlyEarned;
+    }
+
+    @Transactional
+    public void updateStreak(User user) {
+        LocalDate today = LocalDate.now();
+        LocalDate last = user.getLastSolvedDate();
+
+        if (last == null || last.isBefore(today.minusDays(1))) {
+            user.setStreak(1);
+        } else if (last.equals(today.minusDays(1))) {
+            user.setStreak(user.getStreak() + 1);
+        }
+
+        if (user.getStreak() > user.getMaxStreak()) {
+            user.setMaxStreak(user.getStreak());
+        }
+        user.setLastSolvedDate(today);
+        userRepo.save(user);
     }
 
     public int calculateLevel(int xp) {

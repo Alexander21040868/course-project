@@ -26,7 +26,9 @@
             </div>
             <nav class="nav">
                 <button class="nav-item active" data-view="quests"><span class="nav-icon">🗺</span> Подземелья</button>
+                <button class="nav-item" data-view="catalog"><span class="nav-icon">📋</span> Каталог</button>
                 <button class="nav-item" data-view="challenges"><span class="nav-icon">⚔</span> Арена</button>
+                <button class="nav-item" data-view="leaderboard"><span class="nav-icon">🏅</span> Лидерборд</button>
                 <button class="nav-item" data-view="achievements"><span class="nav-icon">🏆</span> Достижения</button>
                 <button class="nav-item" data-view="profile"><span class="nav-icon">👤</span> Профиль</button>
                 <div class="nav-divider"></div>
@@ -87,7 +89,22 @@
                     <div class="result-tests" id="resultTests"></div>
                     <div class="result-xp" id="resultXp"></div>
                 </div>
+                <details class="history-box" id="taskHistoryBox" style="display:none">
+                    <summary>📜 Предыдущие попытки</summary>
+                    <div id="taskHistoryList"></div>
+                </details>
             </div>
+
+            <!-- CATALOG -->
+            <div class="view" id="view-catalog">
+                <div class="search-bar">
+                    <input type="text" id="catalogSearch" placeholder="Поиск по названию задачи..." autocomplete="off">
+                </div>
+                <div class="task-list" id="catalogList"></div>
+            </div>
+
+            <!-- LEADERBOARD -->
+            <div class="view" id="view-leaderboard"><div id="leaderboardContent"></div></div>
 
             <!-- CHALLENGES -->
             <div class="view" id="view-challenges"><div id="challengesList"></div></div>

@@ -1,6 +1,7 @@
 package org.example.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -29,6 +30,15 @@ public class User {
 
     @Column(nullable = false)
     private int level = 1;
+
+    @Column(nullable = false)
+    private int streak = 0;
+
+    @Column(name = "max_streak", nullable = false)
+    private int maxStreak = 0;
+
+    @Column(name = "last_solved_date")
+    private LocalDate lastSolvedDate;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -63,6 +73,15 @@ public class User {
 
     public int getLevel() { return level; }
     public void setLevel(int level) { this.level = level; }
+
+    public int getStreak() { return streak; }
+    public void setStreak(int streak) { this.streak = streak; }
+
+    public int getMaxStreak() { return maxStreak; }
+    public void setMaxStreak(int maxStreak) { this.maxStreak = maxStreak; }
+
+    public LocalDate getLastSolvedDate() { return lastSolvedDate; }
+    public void setLastSolvedDate(LocalDate lastSolvedDate) { this.lastSolvedDate = lastSolvedDate; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

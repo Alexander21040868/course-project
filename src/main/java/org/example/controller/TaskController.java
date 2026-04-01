@@ -18,6 +18,12 @@ public class TaskController {
         this.taskService = taskService;
     }
 
+    @GetMapping
+    public ResponseEntity<List<TaskDto>> getAll(@RequestParam(required = false) String search,
+                                                 Principal principal) {
+        return ResponseEntity.ok(taskService.findAll(search, principal.getName()));
+    }
+
     @GetMapping("/lesson/{lessonId}")
     public ResponseEntity<List<TaskDto>> getByLesson(@PathVariable Long lessonId, Principal principal) {
         return ResponseEntity.ok(taskService.findByLesson(lessonId, principal.getName()));
