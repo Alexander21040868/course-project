@@ -1,0 +1,6 @@
+#FileLock
+#Wed Apr 01 00:52:01 MSK 2026
+hostName=192.168.1.236
+id=19d45e1c1d98dba6e7a5fdd409f29700d6dc543ac5b
+method=file
+server=192.168.1.236\:59699

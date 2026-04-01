@@ -1,5 +1,6 @@
 package org.example.dto;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record ProfileDto(
@@ -9,5 +10,9 @@ public record ProfileDto(
         int level,
         int xpToNextLevel,
         long solvedCount,
+        long totalTasks,
+        LocalDateTime createdAt,
+        List<LessonProgressDto> lessonsProgress,
+        List<SubmissionHistoryDto> recentSubmissions,
         List<AchievementDto> achievements
 ) {}

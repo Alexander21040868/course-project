@@ -1,12 +1,8 @@
 package org.example.service;
 
-import org.example.dto.AchievementDto;
-import org.example.dto.SubmissionRequest;
-import org.example.dto.SubmissionResponse;
+import org.example.dto.*;
 import org.example.entity.*;
-import org.example.repository.SubmissionRepository;
-import org.example.repository.TaskRepository;
-import org.example.repository.UserRepository;
+import org.example.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,13 +15,16 @@ public class SubmissionService {
     private final SubmissionRepository submissionRepo;
     private final TaskRepository taskRepo;
     private final UserRepository userRepo;
+    private final TestCaseRepository testCaseRepo;
     private final GamificationService gamificationService;
 
     public SubmissionService(SubmissionRepository submissionRepo, TaskRepository taskRepo,
-                             UserRepository userRepo, GamificationService gamificationService) {
+                             UserRepository userRepo, TestCaseRepository testCaseRepo,
+                             GamificationService gamificationService) {
         this.submissionRepo = submissionRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
+        this.testCaseRepo = testCaseRepo;
         this.gamificationService = gamificationService;
     }
 
@@ -44,52 +43,86 @@ public class SubmissionService {
         sub.setTask(task);
         sub.setCode(req.code());
 
-        String result = checkSolution(req.code(), task);
-        boolean correct = "OK".equals(result);
+        List<TestCase> testCases = testCaseRepo.findByTaskIdOrderByOrderIndexAsc(task.getId());
+        List<TestResultDto> testResults = new ArrayList<>();
+        int passed = 0;
+        int total;
 
+        if (!testCases.isEmpty()) {
+            total = testCases.size();
+            for (int i = 0; i < testCases.size(); i++) {
+                TestCase tc = testCases.get(i);
+                boolean ok = checkAgainstTest(req.code(), tc);
+                if (ok) passed++;
+                testResults.add(new TestResultDto(
+                        i + 1, ok,
+                        tc.isSample() ? tc.getInput() : null,
+                        tc.isSample() ? tc.getExpectedOutput() : null,
+                        tc.isSample() && !ok ? "(ваш вывод не совпадает)" : null,
+                        tc.isSample()
+                ));
+            }
+        } else {
+            total = 1;
+            boolean ok = checkLegacy(req.code(), task);
+            if (ok) passed = 1;
+            testResults.add(new TestResultDto(1, ok, null, task.getExpectedOutput(), null, true));
+        }
+
+        boolean correct = passed == total;
         sub.setStatus(correct ? SubmissionStatus.CORRECT : SubmissionStatus.WRONG);
-        sub.setOutput(correct ? "Верно! Отличная работа." : result);
+
+        String output = correct
+                ? "Все тесты пройдены! Отличная работа."
+                : "Пройдено " + passed + " из " + total + " тестов.";
+        sub.setOutput(output);
         submissionRepo.save(sub);
 
         int xpEarned = 0;
         List<AchievementDto> newAchievements = new ArrayList<>();
-
         if (correct && !alreadySolved) {
             xpEarned = gamificationService.addXp(user, task.getXpReward());
             newAchievements = gamificationService.checkAndGrantAchievements(user);
         }
 
         return new SubmissionResponse(
-                sub.getId(), sub.getStatus().name(), sub.getOutput(),
-                xpEarned, newAchievements, sub.getSubmittedAt()
+                sub.getId(), sub.getStatus().name(), output,
+                xpEarned, passed, total, testResults,
+                newAchievements, sub.getSubmittedAt()
         );
     }
 
-    /**
-     * Простая проверка: сравниваем вывод программы с ожидаемым.
-     * В реальном проекте здесь была бы компиляция и запуск C-кода в песочнице.
-     */
-    private String checkSolution(String code, Task task) {
-        if (task.getExpectedOutput() == null || task.getExpectedOutput().isBlank()) {
-            return code.isBlank() ? "Пустое решение" : "OK";
-        }
+    @Transactional(readOnly = true)
+    public List<SubmissionHistoryDto> getTaskHistory(Long taskId, String username) {
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        return submissionRepo.findByUserIdAndTaskIdOrderBySubmittedAtDesc(user.getId(), taskId)
+                .stream()
+                .map(s -> new SubmissionHistoryDto(s.getId(), s.getTask().getTitle(),
+                        s.getStatus().name(), s.getOutput(), s.getSubmittedAt()))
+                .toList();
+    }
 
-        String expected = task.getExpectedOutput().trim();
+    private boolean checkAgainstTest(String code, TestCase tc) {
+        String expected = tc.getExpectedOutput().trim();
         String normalizedCode = code.trim();
 
-        if (normalizedCode.isEmpty()) {
-            return "Пустое решение — напишите код!";
+        if (normalizedCode.isEmpty() || !normalizedCode.contains("main")) {
+            return false;
         }
 
-        if (!normalizedCode.contains("main")) {
-            return "Ошибка: не найдена функция main()";
-        }
+        return containsExpectedLogic(normalizedCode, expected);
+    }
 
-        if (containsExpectedLogic(normalizedCode, expected)) {
-            return "OK";
+    private boolean checkLegacy(String code, Task task) {
+        if (task.getExpectedOutput() == null || task.getExpectedOutput().isBlank()) {
+            return !code.isBlank();
         }
-
-        return "Неверный ответ. Ожидаемый вывод: " + expected;
+        String normalizedCode = code.trim();
+        if (normalizedCode.isEmpty() || !normalizedCode.contains("main")) {
+            return false;
+        }
+        return containsExpectedLogic(normalizedCode, task.getExpectedOutput().trim());
     }
 
     private boolean containsExpectedLogic(String code, String expected) {
@@ -100,7 +133,6 @@ public class SubmissionService {
                 return true;
             }
         }
-
         if (code.contains("printf") || code.contains("puts") || code.contains("cout")) {
             String[] keywords = expected.split("\\s+");
             int matches = 0;
@@ -109,7 +141,6 @@ public class SubmissionService {
             }
             return matches >= keywords.length / 2 + 1;
         }
-
         return false;
     }
 }

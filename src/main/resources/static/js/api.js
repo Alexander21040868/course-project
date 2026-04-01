@@ -12,6 +12,15 @@ const API = {
         return h;
     },
 
+    _handleAuthError(err) {
+        if (err && err.error && err.error.includes('не найден')) {
+            localStorage.clear();
+            window.location.href = '/index.html';
+            return true;
+        }
+        return false;
+    },
+
     async get(path) {
         const res = await fetch(this.base + path, { headers: this.headers() });
         if (res.status === 401 || res.status === 403) {
@@ -21,6 +30,7 @@ const API = {
         }
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
+            if (this._handleAuthError(err)) return;
             throw new Error(err.error || 'Ошибка запроса');
         }
         return res.json();
@@ -39,6 +49,7 @@ const API = {
         }
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
+            if (this._handleAuthError(err)) return;
             throw new Error(err.error || 'Ошибка запроса');
         }
         return res.json();
@@ -51,6 +62,7 @@ const API = {
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
+            if (this._handleAuthError(err)) return;
             throw new Error(err.error || 'Ошибка удаления');
         }
     }

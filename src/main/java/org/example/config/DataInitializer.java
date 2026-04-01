@@ -6,22 +6,22 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-/**
- * Заполняет БД демо-данными при первом запуске.
- */
 @Component
 public class DataInitializer implements CommandLineRunner {
 
     private final UserRepository userRepo;
     private final LessonRepository lessonRepo;
     private final TaskRepository taskRepo;
+    private final TestCaseRepository testCaseRepo;
     private final PasswordEncoder encoder;
 
     public DataInitializer(UserRepository userRepo, LessonRepository lessonRepo,
-                           TaskRepository taskRepo, PasswordEncoder encoder) {
+                           TaskRepository taskRepo, TestCaseRepository testCaseRepo,
+                           PasswordEncoder encoder) {
         this.userRepo = userRepo;
         this.lessonRepo = lessonRepo;
         this.taskRepo = taskRepo;
+        this.testCaseRepo = testCaseRepo;
         this.encoder = encoder;
     }
 
@@ -29,115 +29,271 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         if (userRepo.count() > 0) return;
 
-        // --- Users ---
         User teacher = new User("teacher", "teacher@codequest.dev", encoder.encode("teacher"), Role.TEACHER);
         User student = new User("student", "student@codequest.dev", encoder.encode("student"), Role.STUDENT);
         userRepo.save(teacher);
         userRepo.save(student);
 
-        // --- Lesson 1 ---
-        Lesson l1 = new Lesson();
-        l1.setTitle("Введение в C");
-        l1.setDescription("Основы языка C: первая программа, компиляция и запуск.");
-        l1.setContent(
+        // ═══════════════════════════════════════════
+        // LESSON 1: Введение в C
+        // ═══════════════════════════════════════════
+        Lesson l1 = lesson(teacher, 0, "Введение в C",
+            "Первая программа, printf, компиляция и запуск.",
             "<h3>Что такое C?</h3>" +
-            "<p>C — один из старейших и самых влиятельных языков программирования. " +
-            "Он был создан Деннисом Ритчи в 1972 году в Bell Labs.</p>" +
+            "<p>C — один из старейших и самых влиятельных языков. Создан Деннисом Ритчи в 1972 году в Bell Labs. " +
+            "На нём написаны ядро Linux, базы данных и встраиваемые системы.</p>" +
             "<h3>Первая программа</h3>" +
             "<pre><code>#include &lt;stdio.h&gt;\n\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}</code></pre>" +
-            "<p><code>#include &lt;stdio.h&gt;</code> подключает стандартную библиотеку ввода-вывода. " +
-            "Функция <code>main()</code> — точка входа в программу.</p>" +
-            "<h3>Компиляция</h3>" +
-            "<pre><code>gcc hello.c -o hello\n./hello</code></pre>"
-        );
-        l1.setOrderIndex(0);
-        l1.setAuthor(teacher);
-        lessonRepo.save(l1);
+            "<p><code>#include &lt;stdio.h&gt;</code> — подключает библиотеку ввода/вывода. " +
+            "<code>main()</code> — точка входа. <code>printf()</code> — вывод текста.</p>" +
+            "<h3>Компиляция</h3><pre><code>gcc hello.c -o hello\n./hello</code></pre>");
 
-        // --- Tasks for Lesson 1 ---
-        createTask(l1, "Hello, World!", 
-            "Напишите программу на C, которая выводит <code>Hello, World!</code> на экран.",
-            Difficulty.EASY, 15,
-            "#include <stdio.h>\n\nint main() {\n    // Ваш код здесь\n    return 0;\n}",
-            "Hello, World!", "Используйте функцию printf()", 0);
+        task(l1, 0, "Hello, World!", "Выведите <code>Hello, World!</code> на экран.",
+            Difficulty.EASY, 15, "#include <stdio.h>\n\nint main() {\n    // Ваш код\n    return 0;\n}",
+            "Hello, World!", "Используйте printf()",
+            new String[]{null, "Hello, World!", "true"},
+            new String[]{null, "Hello, World!", "false"});
 
-        createTask(l1, "Сумма двух чисел",
-            "Напишите программу, которая объявляет две переменные <code>a = 5</code> и <code>b = 3</code>, " +
-            "вычисляет их сумму и выводит результат: <code>8</code>",
-            Difficulty.EASY, 20,
-            "#include <stdio.h>\n\nint main() {\n    int a = 5;\n    int b = 3;\n    // Вычислите и выведите сумму\n    return 0;\n}",
-            "8", "printf(\"%d\", a + b)", 1);
+        task(l1, 1, "Вывод нескольких строк", "Выведите две строки:\n<code>Hello</code>\n<code>World</code>",
+            Difficulty.EASY, 15, "#include <stdio.h>\n\nint main() {\n    // Две строки\n    return 0;\n}",
+            "Hello\nWorld", "Два вызова printf() с \\n",
+            new String[]{null, "Hello\nWorld", "true"});
 
-        createTask(l1, "Таблица умножения",
-            "Напишите программу, которая выводит таблицу умножения на 7 (от 7*1 до 7*10). " +
-            "Формат вывода: <code>7 x 1 = 7</code>",
-            Difficulty.MEDIUM, 35,
-            "#include <stdio.h>\n\nint main() {\n    // Используйте цикл for\n    return 0;\n}",
-            "7 x 1 = 7", "Используйте цикл for от 1 до 10", 2);
+        task(l1, 2, "Сумма двух чисел", "Объявите <code>a = 5</code> и <code>b = 3</code>, выведите их сумму.",
+            Difficulty.EASY, 20, "#include <stdio.h>\n\nint main() {\n    int a = 5;\n    int b = 3;\n    // Выведите сумму\n    return 0;\n}",
+            "8", "printf(\"%d\", a + b)",
+            new String[]{null, "8", "true"});
 
-        // --- Lesson 2 ---
-        Lesson l2 = new Lesson();
-        l2.setTitle("Условия и циклы");
-        l2.setDescription("Управляющие конструкции: if/else, switch, while, for.");
-        l2.setContent(
-            "<h3>Условный оператор if/else</h3>" +
-            "<pre><code>if (x > 0) {\n    printf(\"Положительное\\n\");\n} else {\n    printf(\"Неположительное\\n\");\n}</code></pre>" +
+        task(l1, 3, "Площадь прямоугольника", "Ширина=7, высота=4. Выведите площадь.",
+            Difficulty.EASY, 20, "#include <stdio.h>\n\nint main() {\n    int w = 7, h = 4;\n    // Выведите площадь\n    return 0;\n}",
+            "28", "printf(\"%d\", w * h)",
+            new String[]{null, "28", "true"});
+
+        // ═══════════════════════════════════════════
+        // LESSON 2: Переменные и типы данных
+        // ═══════════════════════════════════════════
+        Lesson l2 = lesson(teacher, 1, "Переменные и типы данных",
+            "int, float, double, char и форматированный вывод.",
+            "<h3>Основные типы</h3>" +
+            "<table><tr><th>Тип</th><th>Размер</th><th>Пример</th></tr>" +
+            "<tr><td>int</td><td>4 байта</td><td>42</td></tr>" +
+            "<tr><td>float</td><td>4 байта</td><td>3.14f</td></tr>" +
+            "<tr><td>double</td><td>8 байт</td><td>3.14159</td></tr>" +
+            "<tr><td>char</td><td>1 байт</td><td>'A'</td></tr></table>" +
+            "<h3>Форматированный вывод</h3>" +
+            "<pre><code>int x = 10;\nfloat pi = 3.14f;\nchar ch = 'A';\nprintf(\"x=%d, pi=%.2f, ch=%c\\n\", x, pi, ch);</code></pre>");
+
+        task(l2, 0, "Обмен переменных", "Даны <code>a=10, b=20</code>. Поменяйте их местами и выведите <code>a</code> затем <code>b</code>.",
+            Difficulty.EASY, 20, "#include <stdio.h>\n\nint main() {\n    int a = 10, b = 20;\n    // Обменяйте значения\n    printf(\"%d %d\", a, b);\n    return 0;\n}",
+            "20 10", "Используйте третью переменную temp",
+            new String[]{null, "20 10", "true"});
+
+        task(l2, 1, "Преобразование температуры", "Переведите 100°F в Цельсии. Формула: C = (F-32)*5/9. Выведите целую часть.",
+            Difficulty.MEDIUM, 25, "#include <stdio.h>\n\nint main() {\n    int f = 100;\n    // Вычислите и выведите\n    return 0;\n}",
+            "37", "Используйте целочисленное деление или приведение типа",
+            new String[]{null, "37", "true"});
+
+        task(l2, 2, "ASCII код символа", "Выведите ASCII-код символа <code>'Z'</code>.",
+            Difficulty.EASY, 15, "#include <stdio.h>\n\nint main() {\n    char ch = 'Z';\n    // Выведите код\n    return 0;\n}",
+            "90", "printf(\"%d\", ch) — char автоматически приводится к int",
+            new String[]{null, "90", "true"});
+
+        // ═══════════════════════════════════════════
+        // LESSON 3: Условия и ветвления
+        // ═══════════════════════════════════════════
+        Lesson l3 = lesson(teacher, 2, "Условия и ветвления",
+            "Операторы if/else, switch, тернарный оператор.",
+            "<h3>if / else</h3>" +
+            "<pre><code>if (x > 0) {\n    printf(\"Positive\");\n} else if (x == 0) {\n    printf(\"Zero\");\n} else {\n    printf(\"Negative\");\n}</code></pre>" +
+            "<h3>Тернарный оператор</h3>" +
+            "<pre><code>int max = (a > b) ? a : b;</code></pre>" +
+            "<h3>switch</h3>" +
+            "<pre><code>switch (day) {\n    case 1: printf(\"Mon\"); break;\n    case 2: printf(\"Tue\"); break;\n    default: printf(\"Other\");\n}</code></pre>");
+
+        task(l3, 0, "Чётное или нечётное?", "Проверьте <code>n = 42</code>. Выведите <code>even</code> или <code>odd</code>.",
+            Difficulty.EASY, 15, "#include <stdio.h>\n\nint main() {\n    int n = 42;\n    // Проверьте\n    return 0;\n}",
+            "even", "n % 2 == 0 → even",
+            new String[]{null, "even", "true"});
+
+        task(l3, 1, "Максимум из трёх", "Даны <code>a=7, b=15, c=9</code>. Выведите максимальное.",
+            Difficulty.EASY, 20, "#include <stdio.h>\n\nint main() {\n    int a=7, b=15, c=9;\n    // Найдите максимум\n    return 0;\n}",
+            "15", "Вложенные if или тернарный оператор",
+            new String[]{null, "15", "true"});
+
+        task(l3, 2, "Оценка по баллам", "Балл=85. Выведите: >=90 → A, >=80 → B, >=70 → C, иначе → F.",
+            Difficulty.MEDIUM, 25, "#include <stdio.h>\n\nint main() {\n    int score = 85;\n    // Определите оценку\n    return 0;\n}",
+            "B", "Используйте цепочку if/else if/else",
+            new String[]{null, "B", "true"});
+
+        task(l3, 3, "Високосный год", "Год=2024. Выведите <code>leap</code> если високосный, иначе <code>common</code>.",
+            Difficulty.MEDIUM, 30, "#include <stdio.h>\n\nint main() {\n    int year = 2024;\n    // Проверьте\n    return 0;\n}",
+            "leap", "Кратен 4 и не 100, или кратен 400",
+            new String[]{null, "leap", "true"});
+
+        // ═══════════════════════════════════════════
+        // LESSON 4: Циклы
+        // ═══════════════════════════════════════════
+        Lesson l4 = lesson(teacher, 3, "Циклы",
+            "for, while, do-while, break и continue.",
             "<h3>Цикл for</h3>" +
-            "<pre><code>for (int i = 0; i < 10; i++) {\n    printf(\"%d \", i);\n}</code></pre>" +
+            "<pre><code>for (int i = 0; i &lt; 5; i++) {\n    printf(\"%d \", i);\n}\n// 0 1 2 3 4</code></pre>" +
             "<h3>Цикл while</h3>" +
-            "<pre><code>int n = 10;\nwhile (n > 0) {\n    printf(\"%d \", n);\n    n--;\n}</code></pre>"
-        );
-        l2.setOrderIndex(1);
-        l2.setAuthor(teacher);
-        lessonRepo.save(l2);
+            "<pre><code>int n = 5;\nwhile (n > 0) {\n    printf(\"%d \", n);\n    n--;\n}</code></pre>" +
+            "<h3>break и continue</h3>" +
+            "<pre><code>for (int i = 0; i &lt; 10; i++) {\n    if (i == 5) break;\n    if (i % 2 == 0) continue;\n    printf(\"%d \", i);\n}\n// 1 3</code></pre>");
 
-        createTask(l2, "Чётное или нечётное?",
-            "Напишите программу, которая проверяет число <code>n = 42</code> и выводит " +
-            "<code>even</code> если оно чётное или <code>odd</code> если нечётное.",
-            Difficulty.EASY, 15,
-            "#include <stdio.h>\n\nint main() {\n    int n = 42;\n    // Проверьте чётность\n    return 0;\n}",
-            "even", "Используйте оператор % (остаток от деления)", 0);
+        task(l4, 0, "Сумма от 1 до N", "Вычислите сумму от 1 до 100. Выведите результат.",
+            Difficulty.EASY, 15, "#include <stdio.h>\n\nint main() {\n    // Вычислите сумму\n    return 0;\n}",
+            "5050", "Цикл for от 1 до 100, суммируйте в переменную",
+            new String[]{null, "5050", "true"});
 
-        createTask(l2, "Числа Фибоначчи",
-            "Выведите первые 10 чисел Фибоначчи через пробел: <code>0 1 1 2 3 5 8 13 21 34</code>",
-            Difficulty.HARD, 50,
-            "#include <stdio.h>\n\nint main() {\n    // Вычислите и выведите числа Фибоначчи\n    return 0;\n}",
-            "0 1 1 2 3 5 8 13 21 34", "Храните два предыдущих числа в переменных", 1);
+        task(l4, 1, "Таблица умножения", "Выведите таблицу умножения на 7 (от 1 до 10). Формат: <code>7 x 1 = 7</code> (каждая с новой строки).",
+            Difficulty.MEDIUM, 35, "#include <stdio.h>\n\nint main() {\n    // Таблица умножения\n    return 0;\n}",
+            "7 x 1 = 7", "Цикл for от 1 до 10",
+            new String[]{null, "7 x 1 = 7", "true"});
 
-        // --- Lesson 3 ---
-        Lesson l3 = new Lesson();
-        l3.setTitle("Массивы и строки");
-        l3.setDescription("Работа с массивами, строками и указателями.");
-        l3.setContent(
-            "<h3>Массивы</h3>" +
-            "<pre><code>int arr[5] = {1, 2, 3, 4, 5};\nfor (int i = 0; i < 5; i++) {\n    printf(\"%d \", arr[i]);\n}</code></pre>" +
-            "<h3>Строки</h3>" +
-            "<p>В C строки — это массивы символов, оканчивающиеся нулевым символом <code>'\\0'</code>.</p>" +
-            "<pre><code>char name[] = \"CodeQuest\";\nprintf(\"%s\\n\", name);</code></pre>" +
+        task(l4, 2, "Факториал", "Вычислите 10! (факториал 10) и выведите результат.",
+            Difficulty.MEDIUM, 30, "#include <stdio.h>\n\nint main() {\n    // Вычислите 10!\n    return 0;\n}",
+            "3628800", "Цикл от 1 до 10, умножайте в переменную-аккумулятор",
+            new String[]{null, "3628800", "true"});
+
+        task(l4, 3, "Числа Фибоначчи", "Выведите первые 10 чисел Фибоначчи через пробел.",
+            Difficulty.HARD, 50, "#include <stdio.h>\n\nint main() {\n    // Фибоначчи\n    return 0;\n}",
+            "0 1 1 2 3 5 8 13 21 34", "Храните два предыдущих числа",
+            new String[]{null, "0 1 1 2 3 5 8 13 21 34", "true"});
+
+        // ═══════════════════════════════════════════
+        // LESSON 5: Функции
+        // ═══════════════════════════════════════════
+        Lesson l5 = lesson(teacher, 4, "Функции",
+            "Объявление, параметры, возвращаемое значение, рекурсия.",
+            "<h3>Объявление функции</h3>" +
+            "<pre><code>int add(int a, int b) {\n    return a + b;\n}\n\nint main() {\n    printf(\"%d\", add(3, 4)); // 7\n    return 0;\n}</code></pre>" +
+            "<h3>Прототипы</h3>" +
+            "<p>Объявление до main(), определение после:</p>" +
+            "<pre><code>int square(int n);  // прототип\n\nint main() {\n    printf(\"%d\", square(5));\n    return 0;\n}\n\nint square(int n) { return n * n; }</code></pre>" +
+            "<h3>Рекурсия</h3>" +
+            "<pre><code>int factorial(int n) {\n    if (n &lt;= 1) return 1;\n    return n * factorial(n - 1);\n}</code></pre>");
+
+        task(l5, 0, "Функция max", "Напишите функцию <code>int max(int a, int b)</code>. В main вызовите <code>max(10, 25)</code> и выведите результат.",
+            Difficulty.EASY, 20, "#include <stdio.h>\n\n// Напишите функцию max\n\nint main() {\n    printf(\"%d\", max(10, 25));\n    return 0;\n}",
+            "25", "return (a > b) ? a : b;",
+            new String[]{null, "25", "true"});
+
+        task(l5, 1, "Функция степени", "Напишите функцию <code>int power(int base, int exp)</code>. Выведите <code>power(2, 10)</code>.",
+            Difficulty.MEDIUM, 30, "#include <stdio.h>\n\n// Напишите функцию power\n\nint main() {\n    printf(\"%d\", power(2, 10));\n    return 0;\n}",
+            "1024", "Цикл, умножающий result на base exp раз",
+            new String[]{null, "1024", "true"});
+
+        task(l5, 2, "Рекурсивный факториал", "Напишите рекурсивную функцию <code>factorial(n)</code>. Выведите <code>factorial(7)</code>.",
+            Difficulty.HARD, 45, "#include <stdio.h>\n\n// Рекурсивный факториал\n\nint main() {\n    printf(\"%d\", factorial(7));\n    return 0;\n}",
+            "5040", "Базовый случай: n <= 1 → return 1",
+            new String[]{null, "5040", "true"});
+
+        // ═══════════════════════════════════════════
+        // LESSON 6: Массивы
+        // ═══════════════════════════════════════════
+        Lesson l6 = lesson(teacher, 5, "Массивы",
+            "Одномерные массивы, обход, поиск, сортировка.",
+            "<h3>Объявление</h3>" +
+            "<pre><code>int arr[5] = {3, 1, 4, 1, 5};</code></pre>" +
+            "<h3>Обход</h3>" +
+            "<pre><code>for (int i = 0; i &lt; 5; i++) {\n    printf(\"%d \", arr[i]);\n}</code></pre>" +
+            "<h3>Пузырьковая сортировка</h3>" +
+            "<pre><code>for (int i = 0; i &lt; n-1; i++)\n    for (int j = 0; j &lt; n-i-1; j++)\n        if (arr[j] &gt; arr[j+1]) {\n            int tmp = arr[j];\n            arr[j] = arr[j+1];\n            arr[j+1] = tmp;\n        }</code></pre>");
+
+        task(l6, 0, "Максимум в массиве", "Найдите максимум в <code>{3, 7, 2, 9, 5}</code>.",
+            Difficulty.MEDIUM, 30, "#include <stdio.h>\n\nint main() {\n    int arr[] = {3, 7, 2, 9, 5};\n    int n = 5;\n    // Найдите максимум\n    return 0;\n}",
+            "9", "Пройдите по массиву, сравнивая с текущим max",
+            new String[]{null, "9", "true"});
+
+        task(l6, 1, "Среднее арифметическое", "Массив <code>{10, 20, 30, 40, 50}</code>. Выведите среднее (целое).",
+            Difficulty.EASY, 20, "#include <stdio.h>\n\nint main() {\n    int arr[] = {10, 20, 30, 40, 50};\n    int n = 5;\n    // Среднее\n    return 0;\n}",
+            "30", "Суммируйте и разделите на n",
+            new String[]{null, "30", "true"});
+
+        task(l6, 2, "Реверс массива", "Переверните <code>{1,2,3,4,5}</code> и выведите через пробел.",
+            Difficulty.MEDIUM, 35, "#include <stdio.h>\n\nint main() {\n    int arr[] = {1, 2, 3, 4, 5};\n    int n = 5;\n    // Переверните\n    return 0;\n}",
+            "5 4 3 2 1", "Два указателя: начало и конец",
+            new String[]{null, "5 4 3 2 1", "true"});
+
+        task(l6, 3, "Сортировка пузырьком", "Отсортируйте <code>{5,3,8,1,2}</code> и выведите.",
+            Difficulty.HARD, 50, "#include <stdio.h>\n\nint main() {\n    int arr[] = {5, 3, 8, 1, 2};\n    int n = 5;\n    // Сортировка\n    return 0;\n}",
+            "1 2 3 5 8", "Вложенные циклы, обмен соседних элементов",
+            new String[]{null, "1 2 3 5 8", "true"});
+
+        // ═══════════════════════════════════════════
+        // LESSON 7: Строки
+        // ═══════════════════════════════════════════
+        Lesson l7 = lesson(teacher, 6, "Строки",
+            "Символьные массивы, strlen, strcmp, strcpy.",
+            "<h3>Строки в C</h3>" +
+            "<p>Строка — массив <code>char</code>, оканчивающийся <code>'\\0'</code>.</p>" +
+            "<pre><code>char name[] = \"Hello\";\nprintf(\"%s, длина: %lu\\n\", name, strlen(name));</code></pre>" +
+            "<h3>Функции string.h</h3>" +
+            "<pre><code>#include &lt;string.h&gt;\nstrlen(s)   // длина\nstrcmp(a,b) // сравнение (0 если равны)\nstrcpy(dst, src) // копирование\nstrcat(dst, src) // конкатенация</code></pre>");
+
+        task(l7, 0, "Длина строки", "Выведите длину строки <code>\"CodeQuest\"</code> (без string.h, вручную).",
+            Difficulty.MEDIUM, 30, "#include <stdio.h>\n\nint main() {\n    char s[] = \"CodeQuest\";\n    // Посчитайте длину вручную\n    return 0;\n}",
+            "9", "Цикл while (s[i] != '\\0') i++;",
+            new String[]{null, "9", "true"});
+
+        task(l7, 1, "Реверс строки", "Переверните <code>\"hello\"</code> и выведите.",
+            Difficulty.HARD, 50, "#include <stdio.h>\n#include <string.h>\n\nint main() {\n    char str[] = \"hello\";\n    // Переверните\n    return 0;\n}",
+            "olleh", "Два индекса: начало и конец",
+            new String[]{null, "olleh", "true"});
+
+        task(l7, 2, "Подсчёт гласных", "Посчитайте гласные (aeiou) в <code>\"programming\"</code>.",
+            Difficulty.MEDIUM, 30, "#include <stdio.h>\n\nint main() {\n    char s[] = \"programming\";\n    // Считайте гласные\n    return 0;\n}",
+            "3", "Цикл по символам, проверка на a/e/i/o/u",
+            new String[]{null, "3", "true"});
+
+        // ═══════════════════════════════════════════
+        // LESSON 8: Указатели и структуры
+        // ═══════════════════════════════════════════
+        Lesson l8 = lesson(teacher, 7, "Указатели и структуры",
+            "Адреса, разыменование, struct, typedef.",
             "<h3>Указатели</h3>" +
-            "<pre><code>int x = 10;\nint *p = &x;\nprintf(\"Адрес: %p, Значение: %d\\n\", p, *p);</code></pre>"
-        );
-        l3.setOrderIndex(2);
-        l3.setAuthor(teacher);
-        lessonRepo.save(l3);
+            "<pre><code>int x = 10;\nint *p = &amp;x;\nprintf(\"Значение: %d\\n\", *p);  // 10\n*p = 20;\nprintf(\"x = %d\\n\", x);  // 20</code></pre>" +
+            "<h3>Указатели и массивы</h3>" +
+            "<pre><code>int arr[] = {1, 2, 3};\nint *p = arr;\nprintf(\"%d %d %d\", *p, *(p+1), *(p+2));</code></pre>" +
+            "<h3>Структуры</h3>" +
+            "<pre><code>typedef struct {\n    char name[50];\n    int age;\n} Person;\n\nPerson p = {\"Alice\", 20};\nprintf(\"%s, %d\", p.name, p.age);</code></pre>");
 
-        createTask(l3, "Максимум в массиве",
-            "Напишите программу, которая находит максимальный элемент в массиве " +
-            "<code>{3, 7, 2, 9, 5}</code> и выводит его.",
-            Difficulty.MEDIUM, 30,
-            "#include <stdio.h>\n\nint main() {\n    int arr[] = {3, 7, 2, 9, 5};\n    int n = 5;\n    // Найдите максимум\n    return 0;\n}",
-            "9", "Пройдите по массиву, сравнивая каждый элемент с текущим максимумом", 0);
+        task(l8, 0, "Обмен через указатели", "Напишите функцию <code>swap(int *a, int *b)</code>. Обменяйте a=5, b=10 и выведите.",
+            Difficulty.MEDIUM, 35, "#include <stdio.h>\n\nvoid swap(int *a, int *b) {\n    // Обмен\n}\n\nint main() {\n    int a=5, b=10;\n    swap(&a, &b);\n    printf(\"%d %d\", a, b);\n    return 0;\n}",
+            "10 5", "int tmp = *a; *a = *b; *b = tmp;",
+            new String[]{null, "10 5", "true"});
 
-        createTask(l3, "Реверс строки",
-            "Напишите программу, которая переворачивает строку <code>\"hello\"</code> и выводит <code>\"olleh\"</code>.",
-            Difficulty.HARD, 50,
-            "#include <stdio.h>\n#include <string.h>\n\nint main() {\n    char str[] = \"hello\";\n    // Переверните строку\n    return 0;\n}",
-            "olleh", "Используйте два индекса: начало и конец строки", 1);
+        task(l8, 1, "Сумма через указатель", "Функция <code>int sum(int *arr, int n)</code> суммирует массив. Выведите сумму <code>{1,2,3,4,5}</code>.",
+            Difficulty.MEDIUM, 30, "#include <stdio.h>\n\nint sum(int *arr, int n) {\n    // Суммирование\n}\n\nint main() {\n    int a[] = {1,2,3,4,5};\n    printf(\"%d\", sum(a, 5));\n    return 0;\n}",
+            "15", "Цикл: total += *(arr + i)",
+            new String[]{null, "15", "true"});
+
+        task(l8, 2, "Структура студент", "Создайте структуру Student (name, grade). Создайте s={\"Alice\", 95} и выведите: <code>Alice 95</code>.",
+            Difficulty.MEDIUM, 30, "#include <stdio.h>\n\n// Определите структуру Student\n\nint main() {\n    // Создайте и выведите\n    return 0;\n}",
+            "Alice 95", "typedef struct { char name[50]; int grade; } Student;",
+            new String[]{null, "Alice 95", "true"});
+
+        task(l8, 3, "Массив структур", "Массив из 3 студентов. Найдите студента с максимальной оценкой и выведите имя.",
+            Difficulty.HARD, 50, "#include <stdio.h>\n\ntypedef struct { char name[50]; int grade; } Student;\n\nint main() {\n    Student students[] = {{\"Alice\",85},{\"Bob\",92},{\"Carol\",88}};\n    // Найдите лучшего\n    return 0;\n}",
+            "Bob", "Цикл по массиву, сравнение grade с текущим max",
+            new String[]{null, "Bob", "true"});
     }
 
-    private void createTask(Lesson lesson, String title, String desc,
-                             Difficulty diff, int xp, String template,
-                             String expected, String hints, int order) {
+    private Lesson lesson(User author, int order, String title, String desc, String content) {
+        Lesson l = new Lesson();
+        l.setTitle(title);
+        l.setDescription(desc);
+        l.setContent(content);
+        l.setOrderIndex(order);
+        l.setAuthor(author);
+        return lessonRepo.save(l);
+    }
+
+    private void task(Lesson lesson, int order, String title, String desc,
+                      Difficulty diff, int xp, String template, String expected,
+                      String hints, String[]... tests) {
         Task t = new Task();
         t.setLesson(lesson);
         t.setTitle(title);
@@ -149,5 +305,16 @@ public class DataInitializer implements CommandLineRunner {
         t.setHints(hints);
         t.setOrderIndex(order);
         taskRepo.save(t);
+
+        int idx = 0;
+        for (String[] tc : tests) {
+            TestCase testCase = new TestCase();
+            testCase.setTask(t);
+            testCase.setInput(tc[0]);
+            testCase.setExpectedOutput(tc[1]);
+            testCase.setSample("true".equals(tc[2]));
+            testCase.setOrderIndex(idx++);
+            testCaseRepo.save(testCase);
+        }
     }
 }

@@ -2,14 +2,9 @@ package org.example.service;
 
 import org.example.dto.TaskCreateRequest;
 import org.example.dto.TaskDto;
-import org.example.entity.Difficulty;
-import org.example.entity.Lesson;
-import org.example.entity.SubmissionStatus;
-import org.example.entity.Task;
-import org.example.repository.LessonRepository;
-import org.example.repository.SubmissionRepository;
-import org.example.repository.TaskRepository;
-import org.example.repository.UserRepository;
+import org.example.dto.TestCaseDto;
+import org.example.entity.*;
+import org.example.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,20 +18,22 @@ public class TaskService {
     private final LessonRepository lessonRepo;
     private final SubmissionRepository submissionRepo;
     private final UserRepository userRepo;
+    private final TestCaseRepository testCaseRepo;
 
     public TaskService(TaskRepository taskRepo, LessonRepository lessonRepo,
-                       SubmissionRepository submissionRepo, UserRepository userRepo) {
+                       SubmissionRepository submissionRepo, UserRepository userRepo,
+                       TestCaseRepository testCaseRepo) {
         this.taskRepo = taskRepo;
         this.lessonRepo = lessonRepo;
         this.submissionRepo = submissionRepo;
         this.userRepo = userRepo;
+        this.testCaseRepo = testCaseRepo;
     }
 
     public List<TaskDto> findByLesson(Long lessonId, String username) {
         Long userId = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"))
                 .getId();
-
         return taskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId).stream()
                 .map(t -> toDto(t, userId))
                 .toList();
@@ -46,7 +43,6 @@ public class TaskService {
         Long userId = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"))
                 .getId();
-
         Task task = taskRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
         return toDto(task, userId);
@@ -67,8 +63,22 @@ public class TaskService {
         task.setExpectedOutput(req.expectedOutput());
         task.setHints(req.hints());
         task.setOrderIndex(req.orderIndex());
+        taskRepo.save(task);
 
-        return toDto(taskRepo.save(task), null);
+        if (req.testCases() != null) {
+            int idx = 0;
+            for (TaskCreateRequest.TestCaseInput tci : req.testCases()) {
+                TestCase tc = new TestCase();
+                tc.setTask(task);
+                tc.setInput(tci.input());
+                tc.setExpectedOutput(tci.expectedOutput());
+                tc.setSample(tci.sample());
+                tc.setOrderIndex(idx++);
+                testCaseRepo.save(tc);
+            }
+        }
+
+        return toDto(task, null);
     }
 
     @Transactional
@@ -79,10 +89,16 @@ public class TaskService {
     private TaskDto toDto(Task t, Long userId) {
         boolean solved = userId != null &&
                 submissionRepo.existsByUserIdAndTaskIdAndStatus(userId, t.getId(), SubmissionStatus.CORRECT);
+
+        List<TestCaseDto> sampleTests = testCaseRepo.findByTaskIdAndSampleTrueOrderByOrderIndexAsc(t.getId())
+                .stream()
+                .map(tc -> new TestCaseDto(tc.getId(), tc.getInput(), tc.getExpectedOutput(), true))
+                .toList();
+
         return new TaskDto(
                 t.getId(), t.getLesson().getId(), t.getTitle(), t.getDescription(),
                 t.getDifficulty().name(), t.getXpReward(), t.getTemplateCode(),
-                t.getHints(), t.getOrderIndex(), solved
+                t.getHints(), t.getOrderIndex(), solved, sampleTests
         );
     }
 }

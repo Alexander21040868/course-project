@@ -34,6 +34,8 @@ public class SecurityConfig {
                     "/css/**", "/js/**", "/favicon.ico"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/lessons/**", "/api/tasks/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/challenges/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/challenges/*/join").authenticated()
                 .requestMatchers("/api/admin/**").hasRole("TEACHER")
                 .anyRequest().authenticated()
             )

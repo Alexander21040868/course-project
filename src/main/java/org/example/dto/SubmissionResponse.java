@@ -8,6 +8,9 @@ public record SubmissionResponse(
         String status,
         String output,
         int xpEarned,
+        int passedTests,
+        int totalTests,
+        List<TestResultDto> testResults,
         List<AchievementDto> newAchievements,
         LocalDateTime submittedAt
 ) {}

@@ -1,5 +1,7 @@
 package org.example.dto;
 
+import java.util.List;
+
 public record TaskDto(
         Long id,
         Long lessonId,
@@ -10,5 +12,6 @@ public record TaskDto(
         String templateCode,
         String hints,
         int orderIndex,
-        boolean solved
+        boolean solved,
+        List<TestCaseDto> sampleTests
 ) {}

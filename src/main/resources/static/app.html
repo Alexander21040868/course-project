@@ -12,45 +12,31 @@
     <div class="toast-container" id="toasts"></div>
 
     <div class="app">
-        <!-- SIDEBAR -->
         <aside class="sidebar">
             <div class="sidebar-logo">&lt;CQ/&gt;</div>
-
-            <div class="char-card">
+            <div class="char-card" style="cursor:pointer" id="charCardLink">
                 <div class="avatar" id="avatar">⚔</div>
                 <div class="char-name" id="charName">...</div>
                 <div class="char-role" id="charRole">...</div>
                 <div class="xp-section">
-                    <div class="xp-label">
-                        <span>XP</span>
-                        <span id="xpText">0</span>
-                    </div>
-                    <div class="xp-bar">
-                        <div class="xp-fill" id="xpFill" style="width:0%"></div>
-                    </div>
+                    <div class="xp-label"><span>XP</span><span id="xpText">0</span></div>
+                    <div class="xp-bar"><div class="xp-fill" id="xpFill" style="width:0%"></div></div>
                     <span class="level-badge" id="levelBadge">LVL 1</span>
                 </div>
             </div>
-
             <nav class="nav">
-                <button class="nav-item active" data-view="quests">
-                    <span class="nav-icon">🗺</span> Подземелья
-                </button>
-                <button class="nav-item" data-view="achievements">
-                    <span class="nav-icon">🏆</span> Достижения
-                </button>
+                <button class="nav-item active" data-view="quests"><span class="nav-icon">🗺</span> Подземелья</button>
+                <button class="nav-item" data-view="challenges"><span class="nav-icon">⚔</span> Арена</button>
+                <button class="nav-item" data-view="achievements"><span class="nav-icon">🏆</span> Достижения</button>
+                <button class="nav-item" data-view="profile"><span class="nav-icon">👤</span> Профиль</button>
                 <div class="nav-divider"></div>
-                <button class="nav-item" data-view="admin" id="adminNav" style="display:none">
-                    <span class="nav-icon">⚙</span> Управление
-                </button>
+                <button class="nav-item" data-view="admin" id="adminNav" style="display:none"><span class="nav-icon">⚙</span> Управление</button>
             </nav>
-
             <div class="sidebar-footer">
                 <button class="logout-btn" id="logoutBtn">↩ Покинуть игру</button>
             </div>
         </aside>
 
-        <!-- TOP BAR -->
         <header class="topbar">
             <div class="topbar-title" id="viewTitle">Карта подземелий</div>
             <div class="topbar-stats">
@@ -59,50 +45,37 @@
             </div>
         </header>
 
-        <!-- MAIN -->
         <main class="main-content">
+            <!-- QUESTS -->
+            <div class="view active" id="view-quests"><div class="quest-map" id="questMap"></div></div>
 
-            <!-- QUESTS VIEW (lessons list) -->
-            <div class="view active" id="view-quests">
-                <div class="quest-map" id="questMap"></div>
-            </div>
-
-            <!-- LESSON VIEW -->
+            <!-- LESSON -->
             <div class="view" id="view-lesson">
                 <button class="back-btn" id="backToQuests">← Назад к карте</button>
-                <div class="lesson-header">
-                    <h2 id="lessonTitle"></h2>
-                </div>
+                <div class="lesson-header"><h2 id="lessonTitle"></h2></div>
                 <div class="lesson-content" id="lessonContent"></div>
-                <h3 style="font-family:var(--pixel);font-size:11px;margin-bottom:16px;">
-                    ⚔ Задачи подземелья
-                </h3>
+                <h3 style="font-family:var(--pixel);font-size:11px;margin-bottom:16px;">⚔ Задачи подземелья</h3>
                 <div class="task-list" id="taskList"></div>
             </div>
 
-            <!-- TASK VIEW -->
+            <!-- TASK -->
             <div class="view" id="view-task">
                 <button class="back-btn" id="backToLesson">← Назад к уроку</button>
                 <div class="task-header">
-                    <div>
-                        <h2 id="taskTitle"></h2>
-                        <span class="task-diff" id="taskDiff"></span>
-                    </div>
+                    <div><h2 id="taskTitle"></h2><span class="task-diff" id="taskDiff"></span></div>
                     <span class="task-xp" id="taskXp"></span>
                 </div>
                 <div class="task-desc" id="taskDesc"></div>
+                <div id="sampleTestsBlock" style="display:none">
+                    <h4 style="font-size:12px;margin-bottom:8px;color:var(--cyan)">📋 Примеры тестов</h4>
+                    <div id="sampleTestsList" class="sample-tests"></div>
+                </div>
                 <details class="hint-box" id="hintBox" style="display:none">
-                    <summary>💡 Подсказка</summary>
-                    <p id="hintText"></p>
+                    <summary>💡 Подсказка</summary><p id="hintText"></p>
                 </details>
                 <div class="editor-wrapper">
-                    <div class="editor-header">
-                        <span class="file-name">📄 solution.c</span>
-                        <span>C language</span>
-                    </div>
-                    <textarea class="code-editor" id="codeEditor"
-                              spellcheck="false"
-                              placeholder="// Напишите ваш код на C здесь..."></textarea>
+                    <div class="editor-header"><span class="file-name">📄 solution.c</span><span>C language</span></div>
+                    <textarea class="code-editor" id="codeEditor" spellcheck="false" placeholder="// Напишите ваш код на C здесь..."></textarea>
                 </div>
                 <div class="submit-row">
                     <button class="btn-submit" id="submitBtn">▶ Отправить решение</button>
@@ -111,91 +84,72 @@
                 <div class="result-panel" id="resultPanel">
                     <div class="result-header" id="resultHeader"></div>
                     <div class="result-body" id="resultBody"></div>
+                    <div class="result-tests" id="resultTests"></div>
                     <div class="result-xp" id="resultXp"></div>
                 </div>
             </div>
 
-            <!-- ACHIEVEMENTS VIEW -->
-            <div class="view" id="view-achievements">
-                <div class="achievements-grid" id="achGrid"></div>
-            </div>
+            <!-- CHALLENGES -->
+            <div class="view" id="view-challenges"><div id="challengesList"></div></div>
 
-            <!-- ADMIN VIEW -->
+            <!-- ACHIEVEMENTS -->
+            <div class="view" id="view-achievements"><div class="achievements-grid" id="achGrid"></div></div>
+
+            <!-- PROFILE -->
+            <div class="view" id="view-profile"><div id="profileContent"></div></div>
+
+            <!-- ADMIN -->
             <div class="view" id="view-admin">
-                <div class="admin-section">
-                    <h3>📖 Создать урок</h3>
-                    <form class="admin-form" id="createLessonForm">
-                        <div>
-                            <label>Название</label>
-                            <input type="text" name="title" required placeholder="Введение в C">
-                        </div>
-                        <div>
-                            <label>Описание</label>
-                            <input type="text" name="description" placeholder="Краткое описание урока">
-                        </div>
-                        <div>
-                            <label>Содержание (HTML)</label>
-                            <textarea name="content" placeholder="<p>Теория урока...</p>"></textarea>
-                        </div>
-                        <div>
-                            <label>Порядковый номер</label>
-                            <input type="number" name="orderIndex" value="0">
-                        </div>
-                        <button type="submit" class="btn-admin">Создать урок</button>
-                    </form>
+                <div class="admin-tabs">
+                    <button class="admin-tab active" data-atab="content">Контент</button>
+                    <button class="admin-tab" data-atab="students">Студенты</button>
+                    <button class="admin-tab" data-atab="challengeAdmin">Челленджи</button>
                 </div>
-
-                <div class="admin-section">
-                    <h3>⚔ Создать задачу</h3>
-                    <form class="admin-form" id="createTaskForm">
-                        <div>
-                            <label>ID Урока</label>
-                            <input type="number" name="lessonId" required placeholder="1">
-                        </div>
-                        <div>
-                            <label>Название</label>
-                            <input type="text" name="title" required placeholder="Hello World">
-                        </div>
-                        <div>
-                            <label>Описание</label>
-                            <textarea name="description" placeholder="Описание задачи..."></textarea>
-                        </div>
-                        <div>
-                            <label>Сложность</label>
-                            <select name="difficulty">
-                                <option value="EASY">Лёгкая</option>
-                                <option value="MEDIUM">Средняя</option>
-                                <option value="HARD">Сложная</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label>Награда XP</label>
-                            <input type="number" name="xpReward" value="10">
-                        </div>
-                        <div>
-                            <label>Шаблон кода</label>
-                            <textarea name="templateCode" placeholder="#include <stdio.h>&#10;&#10;int main() {&#10;    // ваш код&#10;    return 0;&#10;}"></textarea>
-                        </div>
-                        <div>
-                            <label>Ожидаемый вывод</label>
-                            <input type="text" name="expectedOutput" placeholder="Hello, World!">
-                        </div>
-                        <div>
-                            <label>Подсказка</label>
-                            <input type="text" name="hints" placeholder="Используйте printf()">
-                        </div>
-                        <div>
-                            <label>Порядковый номер</label>
-                            <input type="number" name="orderIndex" value="0">
-                        </div>
-                        <button type="submit" class="btn-admin">Создать задачу</button>
-                    </form>
+                <div class="admin-panel active" id="atab-content">
+                    <div class="admin-section">
+                        <h3>📖 Создать урок</h3>
+                        <form class="admin-form" id="createLessonForm">
+                            <div><label>Название</label><input type="text" name="title" required placeholder="Введение в C"></div>
+                            <div><label>Описание</label><input type="text" name="description" placeholder="Краткое описание"></div>
+                            <div><label>Содержание (HTML)</label><textarea name="content" placeholder="<p>Теория...</p>"></textarea></div>
+                            <div><label>Порядковый номер</label><input type="number" name="orderIndex" value="0"></div>
+                            <button type="submit" class="btn-admin">Создать урок</button>
+                        </form>
+                    </div>
+                    <div class="admin-section">
+                        <h3>⚔ Создать задачу</h3>
+                        <form class="admin-form" id="createTaskForm">
+                            <div><label>ID Урока</label><input type="number" name="lessonId" required placeholder="1"></div>
+                            <div><label>Название</label><input type="text" name="title" required placeholder="Hello World"></div>
+                            <div><label>Описание</label><textarea name="description" placeholder="Описание..."></textarea></div>
+                            <div><label>Сложность</label><select name="difficulty"><option value="EASY">Лёгкая</option><option value="MEDIUM">Средняя</option><option value="HARD">Сложная</option></select></div>
+                            <div><label>Награда XP</label><input type="number" name="xpReward" value="10"></div>
+                            <div><label>Шаблон кода</label><textarea name="templateCode" placeholder="#include <stdio.h>"></textarea></div>
+                            <div><label>Ожидаемый вывод</label><input type="text" name="expectedOutput" placeholder="Hello, World!"></div>
+                            <div><label>Подсказка</label><input type="text" name="hints" placeholder="Используйте printf()"></div>
+                            <div><label>Порядковый номер</label><input type="number" name="orderIndex" value="0"></div>
+                            <button type="submit" class="btn-admin">Создать задачу</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="admin-panel" id="atab-students"><div id="studentsTable"></div></div>
+                <div class="admin-panel" id="atab-challengeAdmin">
+                    <div class="admin-section">
+                        <h3>🏟 Создать челлендж</h3>
+                        <form class="admin-form" id="createChallengeForm">
+                            <div><label>Название</label><input type="text" name="title" required placeholder="Марафон новичков"></div>
+                            <div><label>Описание</label><textarea name="description" placeholder="Описание челленджа..."></textarea></div>
+                            <div><label>Начало</label><input type="datetime-local" name="startTime" required></div>
+                            <div><label>Конец</label><input type="datetime-local" name="endTime" required></div>
+                            <div><label>Бонус XP</label><input type="number" name="bonusXp" value="50"></div>
+                            <div><label>ID задач (через запятую)</label><input type="text" name="taskIds" required placeholder="1,2,3"></div>
+                            <button type="submit" class="btn-admin">Создать челлендж</button>
+                        </form>
+                    </div>
                 </div>
             </div>
-
         </main>
     </div>
-
     <script src="/js/api.js"></script>
     <script src="/js/app.js"></script>
 </body>
