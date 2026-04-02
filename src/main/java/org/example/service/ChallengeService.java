@@ -7,12 +7,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @Transactional(readOnly = true)
 public class ChallengeService {
+
+    private static final int K = 40;
 
     private final ChallengeRepository challengeRepo;
     private final ChallengeParticipantRepository participantRepo;
@@ -35,16 +37,14 @@ public class ChallengeService {
         Long userId = userRepo.findByUsername(username).map(User::getId).orElse(null);
         LocalDateTime now = LocalDateTime.now();
         return challengeRepo.findByEndTimeAfterOrderByStartTimeAsc(now).stream()
-                .map(c -> toDto(c, userId, now))
-                .toList();
+                .map(c -> toDto(c, userId, now)).toList();
     }
 
     public List<ChallengeDto> findAll(String username) {
         Long userId = userRepo.findByUsername(username).map(User::getId).orElse(null);
         LocalDateTime now = LocalDateTime.now();
         return challengeRepo.findAllByOrderByCreatedAtDesc().stream()
-                .map(c -> toDto(c, userId, now))
-                .toList();
+                .map(c -> toDto(c, userId, now)).toList();
     }
 
     @Transactional
@@ -59,9 +59,7 @@ public class ChallengeService {
         ch.setEndTime(req.endTime());
         ch.setBonusXp(req.bonusXp() > 0 ? req.bonusXp() : 50);
         ch.setCreatedBy(author);
-
-        List<Task> tasks = taskRepo.findAllById(req.taskIds());
-        ch.setTasks(tasks);
+        ch.setTasks(taskRepo.findAllById(req.taskIds()));
         challengeRepo.save(ch);
 
         return toDto(ch, author.getId(), LocalDateTime.now());
@@ -71,51 +69,92 @@ public class ChallengeService {
     public void join(Long challengeId, String username) {
         User user = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
-        Challenge ch = challengeRepo.findById(challengeId)
-                .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден"));
-
-        if (participantRepo.existsByChallengeIdAndUserId(challengeId, user.getId())) {
+        if (participantRepo.existsByChallengeIdAndUserId(challengeId, user.getId()))
             throw new IllegalArgumentException("Вы уже участвуете");
-        }
 
         ChallengeParticipant cp = new ChallengeParticipant();
-        cp.setChallenge(ch);
+        cp.setChallenge(challengeRepo.findById(challengeId)
+                .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден")));
         cp.setUser(user);
         participantRepo.save(cp);
     }
 
+    @Transactional
     public List<ChallengeResultDto> getResults(Long challengeId) {
         Challenge ch = challengeRepo.findById(challengeId)
                 .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден"));
 
+        List<Long> taskIds = ch.getTasks().stream().map(Task::getId).toList();
         List<ChallengeParticipant> participants =
                 participantRepo.findByChallengeIdOrderByTasksSolvedDesc(challengeId);
 
-        List<Long> taskIds = ch.getTasks().stream().map(Task::getId).toList();
-        AtomicInteger rank = new AtomicInteger(1);
+        // id → {user, solved}
+        List<long[]> standings = new ArrayList<>(); // [userId, rating, solved]
+        Map<Long, User> userMap = new HashMap<>();
 
-        return participants.stream().map(cp -> {
+        for (ChallengeParticipant cp : participants) {
+            User u = cp.getUser();
             int solved = 0;
-            for (Long taskId : taskIds) {
-                if (submissionRepo.existsByUserIdAndTaskIdAndStatus(
-                        cp.getUser().getId(), taskId, SubmissionStatus.CORRECT)) {
+            for (Long tid : taskIds)
+                if (submissionRepo.existsByUserIdAndTaskIdAndStatus(u.getId(), tid, SubmissionStatus.CORRECT))
                     solved++;
-                }
+            standings.add(new long[]{u.getId(), u.getRating(), solved});
+            userMap.put(u.getId(), u);
+        }
+        standings.sort((a, b) -> Long.compare(b[2], a[2]));
+
+        // ELO: считаем при завершении контеста (однократно)
+        Map<Long, Integer> deltas = standings.size() >= 2
+                ? calculateEloDeltas(standings) : Map.of();
+
+        boolean ended = LocalDateTime.now().isAfter(ch.getEndTime());
+        if (ended && !ch.isRated() && !deltas.isEmpty()) {
+            for (var entry : standings) {
+                User u = userMap.get(entry[0]);
+                u.setRating(Math.max(0, u.getRating() + deltas.getOrDefault(u.getId(), 0)));
+                userRepo.save(u);
             }
-            return new ChallengeResultDto(rank.getAndIncrement(),
-                    cp.getUser().getUsername(), solved, cp.getUser().getLevel());
+            ch.setRated(true);
+            challengeRepo.save(ch);
+        }
+
+        AtomicInteger rank = new AtomicInteger(1);
+        return standings.stream().map(s -> {
+            User u = userMap.get(s[0]);
+            return new ChallengeResultDto(rank.getAndIncrement(), u.getUsername(),
+                    (int) s[2], u.getRating(), deltas.getOrDefault(u.getId(), 0));
         }).toList();
+    }
+
+    /**
+     * Попарный ELO (как Codeforces):
+     * Pij = 1 / (1 + 10^((Rj-Ri)/400))
+     * Sij = 1 если solved_i > solved_j, 0.5 если ==, 0 если <
+     * delta_i = K * Σ(Sij - Pij) / (N-1)
+     */
+    private Map<Long, Integer> calculateEloDeltas(List<long[]> standings) {
+        Map<Long, Integer> deltas = new HashMap<>();
+        int n = standings.size();
+
+        for (long[] a : standings) {
+            double delta = 0;
+            for (long[] b : standings) {
+                if (a[0] == b[0]) continue;
+                double expected = 1.0 / (1 + Math.pow(10, (b[1] - a[1]) / 400.0));
+                double actual = a[2] > b[2] ? 1.0 : a[2] == b[2] ? 0.5 : 0.0;
+                delta += K * (actual - expected) / (n - 1);
+            }
+            deltas.put(a[0], (int) Math.round(delta));
+        }
+        return deltas;
     }
 
     private ChallengeDto toDto(Challenge c, Long userId, LocalDateTime now) {
         boolean joined = userId != null &&
                 participantRepo.existsByChallengeIdAndUserId(c.getId(), userId);
         boolean active = now.isAfter(c.getStartTime()) && now.isBefore(c.getEndTime());
-        return new ChallengeDto(
-                c.getId(), c.getTitle(), c.getDescription(),
+        return new ChallengeDto(c.getId(), c.getTitle(), c.getDescription(),
                 c.getStartTime(), c.getEndTime(), c.getBonusXp(),
-                c.getCreatedBy().getUsername(), c.getTasks().size(),
-                joined, active
-        );
+                c.getCreatedBy().getUsername(), c.getTasks().size(), joined, active);
     }
 }

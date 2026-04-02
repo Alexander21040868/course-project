@@ -35,6 +35,9 @@ public class Challenge {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(nullable = false)
+    private boolean rated = false;
+
     @ManyToMany
     @JoinTable(name = "challenge_tasks",
             joinColumns = @JoinColumn(name = "challenge_id"),
@@ -55,6 +58,8 @@ public class Challenge {
     public User getCreatedBy() { return createdBy; }
     public void setCreatedBy(User createdBy) { this.createdBy = createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
+    public boolean isRated() { return rated; }
+    public void setRated(boolean rated) { this.rated = rated; }
     public List<Task> getTasks() { return tasks; }
     public void setTasks(List<Task> tasks) { this.tasks = tasks; }
 }

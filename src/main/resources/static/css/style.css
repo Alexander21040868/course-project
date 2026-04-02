@@ -777,10 +777,33 @@ body::before {
 /* ── STREAK ── */
 .streak-val { color: var(--orange) !important; }
 
-/* ── TASK HISTORY BOX ── */
+/* ── TASK HISTORY BOX (Я.Контест style) ── */
 .history-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-top: 20px; }
 .history-box summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-dim); }
-.history-box .history-item { margin-top: 8px; }
+.submission-entry { border-bottom: 1px solid var(--border); padding: 8px 0; }
+.submission-entry:last-child { border-bottom: none; }
+.sub-header { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 12px; padding: 4px 0; }
+.sub-header:hover { color: var(--cyan); }
+.sub-info { flex: 1; color: var(--text-dim); }
+.sub-toggle { font-size: 10px; color: var(--cyan); font-weight: 700; white-space: nowrap; }
+.sub-code { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-top: 8px; font-size: 12px; color: var(--text); white-space: pre-wrap; word-break: break-all; overflow-x: auto; max-height: 300px; overflow-y: auto; }
+
+/* ── DAILY TASK ── */
+.daily-card { margin-bottom: 24px; }
+.daily-inner { background: linear-gradient(135deg, rgba(255,107,43,.08), rgba(168,85,247,.08)); border: 1px solid var(--orange); border-radius: 12px; padding: 20px 24px; cursor: pointer; transition: all 0.3s; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.daily-inner:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,107,43,.15); }
+.daily-badge { font-family: var(--pixel); font-size: 9px; color: var(--orange); background: rgba(255,107,43,.15); padding: 4px 10px; border-radius: 4px; }
+.daily-inner h3 { font-size: 14px; flex: 1; }
+
+/* ── LEADERBOARD SORT ── */
+.lb-sort { display: flex; gap: 8px; margin-bottom: 16px; }
+.lb-btn { padding: 8px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-family: var(--mono); font-size: 11px; cursor: pointer; }
+.lb-btn.active { color: var(--cyan); border-color: var(--cyan); }
+.lb-btn:hover { border-color: var(--cyan-dim); }
+
+/* ── ELO DELTA ── */
+.delta-pos { color: var(--green); font-weight: 700; }
+.delta-neg { color: var(--red); font-weight: 700; }
 
 @media (max-width: 768px) {
     .stats-grid { grid-template-columns: repeat(2, 1fr); }

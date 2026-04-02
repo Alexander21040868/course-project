@@ -7,9 +7,7 @@ import org.example.repository.SubmissionRepository;
 import org.example.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,12 +26,15 @@ public class LeaderboardController {
     }
 
     @GetMapping
-    public ResponseEntity<List<LeaderboardEntryDto>> get() {
+    public ResponseEntity<List<LeaderboardEntryDto>> get(@RequestParam(defaultValue = "rating") String sort) {
+        var users = "xp".equals(sort)
+                ? userRepo.findTop50ByRoleOrderByXpDesc(Role.STUDENT)
+                : userRepo.findTop50ByRoleOrderByRatingDesc(Role.STUDENT);
+
         AtomicInteger rank = new AtomicInteger(1);
-        List<LeaderboardEntryDto> board = userRepo.findTop50ByRoleOrderByXpDesc(Role.STUDENT)
-                .stream()
+        var board = users.stream()
                 .map(u -> new LeaderboardEntryDto(
-                        rank.getAndIncrement(), u.getUsername(), u.getXp(), u.getLevel(),
+                        rank.getAndIncrement(), u.getUsername(), u.getRating(), u.getXp(), u.getLevel(),
                         submissionRepo.countDistinctTaskByUserIdAndStatus(u.getId(), SubmissionStatus.CORRECT)
                 ))
                 .toList();

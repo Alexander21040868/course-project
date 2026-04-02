@@ -61,13 +61,14 @@ public class ProfileController {
         List<SubmissionHistoryDto> recent = submissionRepo.findByUserIdOrderBySubmittedAtDesc(user.getId())
                 .stream().limit(10)
                 .map(s -> new SubmissionHistoryDto(s.getId(), s.getTask().getTitle(),
-                        s.getStatus().name(), s.getOutput(), s.getSubmittedAt()))
+                        s.getStatus().name(), s.getOutput(), s.getCode(), s.getSubmittedAt()))
                 .toList();
 
         return ResponseEntity.ok(new ProfileDto(
                 user.getUsername(), user.getRole().name(),
                 user.getXp(), user.getLevel(),
                 gamificationService.xpToNextLevel(user.getXp()),
+                user.getRating(),
                 solvedCount, totalTasks,
                 user.getStreak(), user.getMaxStreak(),
                 user.getCreatedAt(),

@@ -102,7 +102,7 @@ public class SubmissionService {
         return submissionRepo.findByUserIdAndTaskIdOrderBySubmittedAtDesc(user.getId(), taskId)
                 .stream()
                 .map(s -> new SubmissionHistoryDto(s.getId(), s.getTask().getTitle(),
-                        s.getStatus().name(), s.getOutput(), s.getSubmittedAt()))
+                        s.getStatus().name(), s.getOutput(), s.getCode(), s.getSubmittedAt()))
                 .toList();
     }
 

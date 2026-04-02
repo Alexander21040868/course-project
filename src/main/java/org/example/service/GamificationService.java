@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,15 +18,18 @@ public class GamificationService {
     private final AchievementRepository achievementRepo;
     private final UserAchievementRepository userAchievementRepo;
     private final SubmissionRepository submissionRepo;
+    private final TaskRepository taskRepo;
 
     public GamificationService(UserRepository userRepo,
                                AchievementRepository achievementRepo,
                                UserAchievementRepository userAchievementRepo,
-                               SubmissionRepository submissionRepo) {
+                               SubmissionRepository submissionRepo,
+                               TaskRepository taskRepo) {
         this.userRepo = userRepo;
         this.achievementRepo = achievementRepo;
         this.userAchievementRepo = userAchievementRepo;
         this.submissionRepo = submissionRepo;
+        this.taskRepo = taskRepo;
     }
 
     @Transactional
@@ -38,14 +42,38 @@ public class GamificationService {
 
     @Transactional
     public List<AchievementDto> checkAndGrantAchievements(User user) {
-        List<AchievementDto> newlyEarned = new ArrayList<>();
-        long solvedCount = submissionRepo.countDistinctTaskByUserIdAndStatus(user.getId(), SubmissionStatus.CORRECT);
+        List<AchievementDto> earned = new ArrayList<>();
+        long solved = submissionRepo.countDistinctTaskByUserIdAndStatus(user.getId(), SubmissionStatus.CORRECT);
 
-        tryGrant(user, "FIRST_BLOOD", solvedCount >= 1, newlyEarned);
-        tryGrant(user, "SOLVER_10", solvedCount >= 10, newlyEarned);
-        tryGrant(user, "SOLVER_50", solvedCount >= 50, newlyEarned);
+        tryGrant(user, "FIRST_BLOOD", solved >= 1, earned);
+        tryGrant(user, "SOLVER_10",   solved >= 10, earned);
+        tryGrant(user, "SOLVER_50",   solved >= 50, earned);
 
-        return newlyEarned;
+        long totalEasy = taskRepo.countByDifficulty(Difficulty.EASY);
+        long solvedEasy = submissionRepo.findByUserIdOrderBySubmittedAtDesc(user.getId()).stream()
+                .filter(s -> s.getStatus() == SubmissionStatus.CORRECT
+                        && s.getTask().getDifficulty() == Difficulty.EASY)
+                .map(s -> s.getTask().getId()).distinct().count();
+        tryGrant(user, "ALL_EASY", totalEasy > 0 && solvedEasy >= totalEasy, earned);
+
+        tryGrant(user, "LESSON_CLEAR", hasAnyLessonCleared(user.getId()), earned);
+
+        LocalTime now = LocalTime.now();
+        boolean isNight = now.getHour() >= 0 && now.getHour() < 5;
+        if (isNight) tryGrant(user, "SPEEDRUN", true, earned);
+
+        return earned;
+    }
+
+    private boolean hasAnyLessonCleared(Long userId) {
+        var lessons = taskRepo.findAllByOrderByIdAsc().stream()
+                .collect(java.util.stream.Collectors.groupingBy(t -> t.getLesson().getId()));
+        for (var entry : lessons.entrySet()) {
+            boolean allSolved = entry.getValue().stream()
+                    .allMatch(t -> submissionRepo.existsByUserIdAndTaskIdAndStatus(userId, t.getId(), SubmissionStatus.CORRECT));
+            if (allSolved && !entry.getValue().isEmpty()) return true;
+        }
+        return false;
     }
 
     @Transactional

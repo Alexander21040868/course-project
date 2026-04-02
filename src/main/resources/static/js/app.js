@@ -41,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (nb) nb.classList.add('active');
         $('viewTitle').textContent = titles[view] || '';
 
-        if (view === 'quests') loadLessons();
+        if (view === 'quests') { loadLessons(); loadDailyTask(); }
         if (view === 'catalog') loadCatalog('');
         if (view === 'achievements') loadAchievements();
         if (view === 'challenges') loadChallenges();
@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.profile = p;
             $('charName').textContent = p.username;
             $('charRole').textContent = p.role === 'TEACHER' ? 'Мастер' : getTitle(p.level);
-            $('xpText').textContent = p.xp + ' XP';
+            $('xpText').textContent = p.rating + ' elo · ' + p.xp + ' xp';
             $('levelBadge').textContent = 'LVL ' + p.level;
             $('solvedStat').textContent = p.solvedCount;
             $('levelStat').textContent = p.level;
@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
                 <div class="stats-grid">
-                    <div class="stat-card"><div class="stat-val">${p.level}</div><div class="stat-label">Уровень</div></div>
+                    <div class="stat-card"><div class="stat-val">${p.rating}</div><div class="stat-label">Рейтинг ELO</div></div>
                     <div class="stat-card"><div class="stat-val">${p.xp}</div><div class="stat-label">Опыт (XP)</div></div>
                     <div class="stat-card"><div class="stat-val">${p.solvedCount}/${p.totalTasks}</div><div class="stat-label">Решено</div></div>
                     <div class="stat-card"><div class="stat-val streak-val">🔥 ${p.streak}</div><div class="stat-label">Streak (макс: ${p.maxStreak})</div></div>
@@ -149,19 +149,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Leaderboard ──
-    async function loadLeaderboard() {
+    async function loadLeaderboard(sort = 'rating') {
         const el = $('leaderboardContent');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
-            const board = await API.get('/leaderboard');
+            const board = await API.get('/leaderboard?sort=' + sort);
             if (!board.length) { el.innerHTML = '<div class="empty-state"><p>Пока нет данных</p></div>'; return; }
-            el.innerHTML = '<table class="results-table leaderboard-table"><tr><th>#</th><th>Герой</th><th>XP</th><th>Уровень</th><th>Решено</th></tr>' +
+
+            const sortBtns = `<div class="lb-sort">
+                <button class="lb-btn ${sort==='rating'?'active':''}" data-sort="rating">По рейтингу</button>
+                <button class="lb-btn ${sort==='xp'?'active':''}" data-sort="xp">По XP</button>
+            </div>`;
+
+            el.innerHTML = sortBtns +
+                '<table class="results-table leaderboard-table"><tr><th>#</th><th>Герой</th><th>ELO</th><th>XP</th><th>LVL</th><th>Решено</th></tr>' +
                 board.map(r => {
-                    const medal = r.rank === 1 ? '🥇' : r.rank === 2 ? '🥈' : r.rank === 3 ? '🥉' : r.rank;
+                    const medal = r.rank <= 3 ? ['','🥇','🥈','🥉'][r.rank] : r.rank;
                     const cls = r.rank <= 3 ? ' class="top-row"' : '';
-                    return `<tr${cls}><td>${medal}</td><td>${esc(r.username)}</td><td>${r.xp}</td><td>${r.level}</td><td>${r.solvedCount}</td></tr>`;
+                    return `<tr${cls}><td>${medal}</td><td>${esc(r.username)}</td><td>${r.rating}</td><td>${r.xp}</td><td>${r.level}</td><td>${r.solvedCount}</td></tr>`;
                 }).join('') + '</table>';
+
+            el.querySelectorAll('.lb-btn').forEach(b =>
+                b.addEventListener('click', () => loadLeaderboard(b.dataset.sort)));
         } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; }
+    }
+
+    // ── Daily Task ──
+    async function loadDailyTask() {
+        try {
+            const t = await API.get('/daily-task');
+            if (!t) return;
+            $('dailyTaskCard').style.display = '';
+            $('dailyTaskCard').innerHTML = `
+                <div class="daily-inner" data-id="${t.id}">
+                    <span class="daily-badge">⚡ ЗАДАЧА ДНЯ · 2x XP</span>
+                    <h3>#${t.id} ${esc(t.title)}</h3>
+                    <span class="task-diff diff-${t.difficulty.toLowerCase()}">${diffLabel(t.difficulty)}</span>
+                    <span class="task-xp">+${t.xpReward} XP</span>
+                </div>`;
+            $('dailyTaskCard').querySelector('.daily-inner').addEventListener('click', () => openTask(t.id));
+        } catch (e) { $('dailyTaskCard').style.display = 'none'; }
     }
 
     // ── Lessons ──
@@ -188,7 +215,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const lesson = await API.get('/lessons/' + id);
             $('lessonTitle').textContent = lesson.title;
-            $('lessonContent').innerHTML = lesson.content || '<p>Теория скоро будет добавлена...</p>';
+            const raw = lesson.content || '';
+            $('lessonContent').innerHTML = raw.startsWith('<') ? raw : (typeof marked !== 'undefined' ? marked.parse(raw) : raw);
             const tasks = await API.get('/tasks/lesson/' + id);
             if (!tasks.length) { $('taskList').innerHTML = '<div class="empty-state"><p>Задачи не созданы.</p></div>'; return; }
             $('taskList').innerHTML = tasks.map(t => `
@@ -231,18 +259,30 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { $('taskDesc').textContent = 'Ошибка: ' + e.message; }
     }
 
-    // ── Task History ──
+    // ── Task History (с кодом посылки, как Я.Контест) ──
     async function loadTaskHistory(taskId) {
         try {
             const history = await API.get('/submissions/task/' + taskId);
             if (history.length) {
                 $('taskHistoryBox').style.display = '';
-                $('taskHistoryList').innerHTML = history.map(s => `
-                    <div class="history-item">
-                        <span class="history-status">${s.status === 'CORRECT' ? '✅' : '❌'}</span>
-                        <span class="history-task">${esc(s.output)}</span>
-                        <span class="history-time">${new Date(s.submittedAt).toLocaleString('ru')}</span>
+                $('taskHistoryList').innerHTML = history.map((s, i) => `
+                    <div class="submission-entry">
+                        <div class="sub-header" data-idx="${i}">
+                            <span class="history-status">${s.status === 'CORRECT' ? '✅' : '❌'}</span>
+                            <span class="sub-info">#${s.id} · ${esc(s.output)}</span>
+                            <span class="history-time">${new Date(s.submittedAt).toLocaleString('ru')}</span>
+                            <span class="sub-toggle">▶ код</span>
+                        </div>
+                        <pre class="sub-code" id="sub-code-${i}" style="display:none">${esc(s.code)}</pre>
                     </div>`).join('');
+                $('taskHistoryList').querySelectorAll('.sub-header').forEach(h => {
+                    h.addEventListener('click', () => {
+                        const code = $('sub-code-' + h.dataset.idx);
+                        const visible = code.style.display !== 'none';
+                        code.style.display = visible ? 'none' : 'block';
+                        h.querySelector('.sub-toggle').textContent = visible ? '▶ код' : '▼ код';
+                    });
+                });
             } else { $('taskHistoryBox').style.display = 'none'; }
         } catch (e) { $('taskHistoryBox').style.display = 'none'; }
     }
@@ -307,8 +347,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const results = await API.get('/challenges/' + b.dataset.id + '/results');
                     r.innerHTML = results.length
-                        ? '<table class="results-table"><tr><th>#</th><th>Герой</th><th>Решено</th><th>LVL</th></tr>' +
-                          results.map(x => `<tr><td>${x.rank}</td><td>${esc(x.username)}</td><td>${x.tasksSolved}</td><td>${x.level}</td></tr>`).join('') + '</table>'
+                        ? '<table class="results-table"><tr><th>#</th><th>Герой</th><th>Решено</th><th>ELO</th><th>Δ</th></tr>' +
+                          results.map(x => {
+                              const dc = x.ratingDelta > 0 ? 'delta-pos' : x.ratingDelta < 0 ? 'delta-neg' : '';
+                              const ds = x.ratingDelta > 0 ? '+'+x.ratingDelta : x.ratingDelta;
+                              return `<tr><td>${x.rank}</td><td>${esc(x.username)}</td><td>${x.tasksSolved}</td><td>${x.rating}</td><td class="${dc}">${ds}</td></tr>`;
+                          }).join('') + '</table>'
                         : '<p style="font-size:12px;color:var(--text-dim)">Нет участников</p>';
                     r.style.display = '';
                 } catch(e) { r.innerHTML = '<p>Ошибка</p>'; r.style.display = ''; }

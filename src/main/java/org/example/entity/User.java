@@ -32,6 +32,9 @@ public class User {
     private int level = 1;
 
     @Column(nullable = false)
+    private int rating = 1200;
+
+    @Column(nullable = false)
     private int streak = 0;
 
     @Column(name = "max_streak", nullable = false)
@@ -73,6 +76,9 @@ public class User {
 
     public int getLevel() { return level; }
     public void setLevel(int level) { this.level = level; }
+
+    public int getRating() { return rating; }
+    public void setRating(int rating) { this.rating = rating; }
 
     public int getStreak() { return streak; }
     public void setStreak(int streak) { this.streak = streak; }
