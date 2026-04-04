@@ -3,6 +3,8 @@ package org.example.service;
 import org.example.dto.*;
 import org.example.entity.*;
 import org.example.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +13,8 @@ import java.util.List;
 
 @Service
 public class SubmissionService {
+
+    private static final Logger log = LoggerFactory.getLogger(SubmissionService.class);
 
     private final SubmissionRepository submissionRepo;
     private final TaskRepository taskRepo;
@@ -87,6 +91,9 @@ public class SubmissionService {
                 newAchievements = gamificationService.checkAndGrantAchievements(user);
             }
         }
+
+        log.info("User {} submitted task #{}: {} ({}/{} tests) +{} XP",
+                username, req.taskId(), sub.getStatus(), passed, total, xpEarned);
 
         return new SubmissionResponse(
                 sub.getId(), sub.getStatus().name(), output,

@@ -254,7 +254,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>`).join('');
             } else { $('sampleTestsBlock').style.display = 'none'; }
 
-            $('codeEditor').value = t.templateCode || '#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}';
+            const template = t.templateCode || '#include <stdio.h>\n\nint main() {\n    \n    return 0;\n}';
+            if (state.cm) { state.cm.setValue(template); }
+            else { $('codeEditor').value = template; }
             loadTaskHistory(id);
         } catch (e) { $('taskDesc').textContent = 'Ошибка: ' + e.message; }
     }
@@ -289,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Submit ──
     $('submitBtn').addEventListener('click', async () => {
-        const code = $('codeEditor').value.trim();
+        const code = (state.cm ? state.cm.getValue() : $('codeEditor').value).trim();
         if (!code) return;
         $('submitBtn').disabled = true; $('submitSpinner').style.display = '';
         try {
@@ -412,6 +414,31 @@ document.addEventListener('DOMContentLoaded', () => {
     $('codeEditor').addEventListener('keydown', e => {
         if (e.key === 'Tab') { e.preventDefault(); const s = $('codeEditor').selectionStart; $('codeEditor').value = $('codeEditor').value.substring(0,s)+'    '+$('codeEditor').value.substring($('codeEditor').selectionEnd); $('codeEditor').selectionStart = $('codeEditor').selectionEnd = s+4; }
     });
+
+    // ── CodeMirror ──
+    if (typeof CodeMirror !== 'undefined') {
+        state.cm = CodeMirror.fromTextArea($('codeEditor'), {
+            mode: 'text/x-csrc', theme: 'material-darker',
+            lineNumbers: false, tabSize: 4, indentWithTabs: false,
+            matchBrackets: true, lineWrapping: true
+        });
+        state.cm.setSize('100%', 280);
+    }
+
+    // ── Level Up Animation ──
+    let prevLevel = null;
+    const origLoadProfile = loadProfile;
+    loadProfile = async function () {
+        await origLoadProfile();
+        if (state.profile) {
+            if (prevLevel !== null && state.profile.level > prevLevel) {
+                $('levelUpLevel').textContent = state.profile.level;
+                $('levelUpOverlay').style.display = 'flex';
+                setTimeout(() => $('levelUpOverlay').style.display = 'none', 2500);
+            }
+            prevLevel = state.profile.level;
+        }
+    };
 
     loadProfile(); loadLessons();
 });

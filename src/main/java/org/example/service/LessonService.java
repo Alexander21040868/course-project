@@ -54,6 +54,17 @@ public class LessonService {
     }
 
     @Transactional
+    public LessonDto update(Long id, LessonCreateRequest req) {
+        Lesson lesson = lessonRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+        lesson.setTitle(req.title());
+        lesson.setDescription(req.description());
+        lesson.setContent(req.content());
+        lesson.setOrderIndex(req.orderIndex());
+        return toDto(lessonRepo.save(lesson));
+    }
+
+    @Transactional
     public void delete(Long id) {
         lessonRepo.deleteById(id);
     }

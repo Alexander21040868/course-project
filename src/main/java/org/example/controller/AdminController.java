@@ -46,6 +46,12 @@ public class AdminController {
         return ResponseEntity.ok(lessonService.create(req, principal.getName()));
     }
 
+    @PutMapping("/lessons/{id}")
+    public ResponseEntity<LessonDto> updateLesson(@PathVariable Long id,
+                                                   @Valid @RequestBody LessonCreateRequest req) {
+        return ResponseEntity.ok(lessonService.update(id, req));
+    }
+
     @DeleteMapping("/lessons/{id}")
     public ResponseEntity<Void> deleteLesson(@PathVariable Long id) {
         lessonService.delete(id);
@@ -55,6 +61,12 @@ public class AdminController {
     @PostMapping("/tasks")
     public ResponseEntity<TaskDto> createTask(@Valid @RequestBody TaskCreateRequest req) {
         return ResponseEntity.ok(taskService.create(req));
+    }
+
+    @PutMapping("/tasks/{id}")
+    public ResponseEntity<TaskDto> updateTask(@PathVariable Long id,
+                                               @Valid @RequestBody TaskCreateRequest req) {
+        return ResponseEntity.ok(taskService.update(id, req));
     }
 
     @DeleteMapping("/tasks/{id}")

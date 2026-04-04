@@ -5,11 +5,15 @@ import org.example.dto.AuthResponse;
 import org.example.entity.Role;
 import org.example.entity.User;
 import org.example.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepo;
     private final PasswordEncoder encoder;
@@ -36,6 +40,7 @@ public class AuthService {
                 Role.STUDENT
         );
         userRepo.save(user);
+        log.info("New user registered: {}", user.getUsername());
 
         String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
         return new AuthResponse(token, user.getUsername(), user.getRole().name());
@@ -43,12 +48,17 @@ public class AuthService {
 
     public AuthResponse login(AuthRequest req) {
         User user = userRepo.findByUsername(req.username())
-                .orElseThrow(() -> new IllegalArgumentException("Неверный логин или пароль"));
+                .orElseThrow(() -> {
+                    log.warn("Failed login: user '{}' not found", req.username());
+                    return new IllegalArgumentException("Неверный логин или пароль");
+                });
 
         if (!encoder.matches(req.password(), user.getPassword())) {
+            log.warn("Failed login: wrong password for '{}'", req.username());
             throw new IllegalArgumentException("Неверный логин или пароль");
         }
 
+        log.info("User '{}' logged in", user.getUsername());
         String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
         return new AuthResponse(token, user.getUsername(), user.getRole().name());
     }

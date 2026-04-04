@@ -85,6 +85,21 @@ public class TaskService {
     }
 
     @Transactional
+    public TaskDto update(Long id, TaskCreateRequest req) {
+        Task task = taskRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+        task.setTitle(req.title());
+        task.setDescription(req.description());
+        if (req.difficulty() != null) task.setDifficulty(Difficulty.valueOf(req.difficulty()));
+        if (req.xpReward() > 0) task.setXpReward(req.xpReward());
+        task.setTemplateCode(req.templateCode());
+        task.setExpectedOutput(req.expectedOutput());
+        task.setHints(req.hints());
+        task.setOrderIndex(req.orderIndex());
+        return toDto(taskRepo.save(task), null);
+    }
+
+    @Transactional
     public void delete(Long id) {
         taskRepo.deleteById(id);
     }
