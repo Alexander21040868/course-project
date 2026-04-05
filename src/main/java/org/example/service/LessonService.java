@@ -19,11 +19,14 @@ public class LessonService {
     private final LessonRepository lessonRepo;
     private final TaskRepository taskRepo;
     private final UserRepository userRepo;
+    private final NotificationService notificationService;
 
-    public LessonService(LessonRepository lessonRepo, TaskRepository taskRepo, UserRepository userRepo) {
+    public LessonService(LessonRepository lessonRepo, TaskRepository taskRepo, UserRepository userRepo,
+                         NotificationService notificationService) {
         this.lessonRepo = lessonRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
+        this.notificationService = notificationService;
     }
 
     public List<LessonDto> findAll() {
@@ -50,7 +53,9 @@ public class LessonService {
         lesson.setOrderIndex(req.orderIndex());
         lesson.setAuthor(author);
 
-        return toDto(lessonRepo.save(lesson));
+        Lesson saved = lessonRepo.save(lesson);
+        notificationService.notifyAllStudents("Новый урок", "Опубликовано подземелье: " + saved.getTitle());
+        return toDto(saved);
     }
 
     @Transactional

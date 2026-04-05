@@ -2,11 +2,9 @@ package org.example.controller;
 
 import jakarta.validation.Valid;
 import org.example.dto.*;
-import org.example.entity.*;
-import org.example.repository.*;
-import org.example.service.ChallengeService;
-import org.example.service.LessonService;
-import org.example.service.TaskService;
+import org.example.service.*;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -22,22 +20,19 @@ public class AdminController {
     private final LessonService lessonService;
     private final TaskService taskService;
     private final ChallengeService challengeService;
-    private final UserRepository userRepo;
-    private final TaskRepository taskRepo;
-    private final LessonRepository lessonRepo;
-    private final SubmissionRepository submissionRepo;
+    private final StudentProgressService studentProgressService;
+    private final ArticleService articleService;
+    private final PdfExportService pdfExportService;
 
     public AdminController(LessonService lessonService, TaskService taskService,
-                           ChallengeService challengeService, UserRepository userRepo,
-                           TaskRepository taskRepo, LessonRepository lessonRepo,
-                           SubmissionRepository submissionRepo) {
+                           ChallengeService challengeService, StudentProgressService studentProgressService,
+                           ArticleService articleService, PdfExportService pdfExportService) {
         this.lessonService = lessonService;
         this.taskService = taskService;
         this.challengeService = challengeService;
-        this.userRepo = userRepo;
-        this.taskRepo = taskRepo;
-        this.lessonRepo = lessonRepo;
-        this.submissionRepo = submissionRepo;
+        this.studentProgressService = studentProgressService;
+        this.articleService = articleService;
+        this.pdfExportService = pdfExportService;
     }
 
     @PostMapping("/lessons")
@@ -83,45 +78,37 @@ public class AdminController {
 
     @GetMapping("/students")
     public ResponseEntity<List<StudentProgressDto>> getStudentsProgress() {
-        long totalTasks = taskRepo.count();
-        List<StudentProgressDto> students = userRepo.findByRole(Role.STUDENT).stream()
-                .map(u -> {
-                    long solved = submissionRepo.countDistinctTaskByUserIdAndStatus(
-                            u.getId(), SubmissionStatus.CORRECT);
-                    double pct = totalTasks > 0 ? (solved * 100.0 / totalTasks) : 0;
-                    return new StudentProgressDto(u.getId(), u.getUsername(),
-                            u.getXp(), u.getLevel(), solved, totalTasks, Math.round(pct * 10) / 10.0);
-                })
-                .toList();
-        return ResponseEntity.ok(students);
+        return ResponseEntity.ok(studentProgressService.listStudents());
     }
 
     @GetMapping("/students/{id}")
     public ResponseEntity<StudentDetailDto> getStudentDetail(@PathVariable Long id) {
-        User user = userRepo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Студент не найден"));
+        return ResponseEntity.ok(studentProgressService.getDetail(id));
+    }
 
-        long totalSolved = submissionRepo.countDistinctTaskByUserIdAndStatus(
-                user.getId(), SubmissionStatus.CORRECT);
+    @GetMapping(value = "/students/{id}/export-pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> exportStudentPdf(@PathVariable Long id) {
+        byte[] pdf = pdfExportService.exportStudentReport(id);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"codequest-progress.pdf\"")
+                .body(pdf);
+    }
 
-        List<LessonProgressDto> lessons = lessonRepo.findAllByOrderByOrderIndexAsc().stream()
-                .map(lesson -> {
-                    List<Task> tasks = taskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId());
-                    List<TaskProgressDto> taskProgress = tasks.stream().map(t -> {
-                        boolean solved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
-                                user.getId(), t.getId(), SubmissionStatus.CORRECT);
-                        long attempts = submissionRepo.findByUserIdAndTaskIdOrderBySubmittedAtDesc(
-                                user.getId(), t.getId()).size();
-                        return new TaskProgressDto(t.getId(), t.getTitle(),
-                                t.getDifficulty().name(), solved, attempts);
-                    }).toList();
-                    int solved = (int) taskProgress.stream().filter(TaskProgressDto::solved).count();
-                    return new LessonProgressDto(lesson.getId(), lesson.getTitle(),
-                            solved, tasks.size(), taskProgress);
-                }).toList();
+    @PostMapping("/articles")
+    public ResponseEntity<ArticleDto> createArticle(@Valid @RequestBody ArticleCreateRequest req,
+                                                     Principal principal) {
+        return ResponseEntity.ok(articleService.create(req, principal.getName()));
+    }
 
-        return ResponseEntity.ok(new StudentDetailDto(
-                user.getId(), user.getUsername(), user.getXp(), user.getLevel(),
-                totalSolved, lessons));
+    @PutMapping("/articles/{id}")
+    public ResponseEntity<ArticleDto> updateArticle(@PathVariable Long id,
+                                                    @Valid @RequestBody ArticleCreateRequest req) {
+        return ResponseEntity.ok(articleService.update(id, req));
+    }
+
+    @DeleteMapping("/articles/{id}")
+    public ResponseEntity<Void> deleteArticle(@PathVariable Long id) {
+        articleService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }

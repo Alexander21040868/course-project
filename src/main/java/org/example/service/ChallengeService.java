@@ -21,16 +21,19 @@ public class ChallengeService {
     private final TaskRepository taskRepo;
     private final UserRepository userRepo;
     private final SubmissionRepository submissionRepo;
+    private final NotificationService notificationService;
 
     public ChallengeService(ChallengeRepository challengeRepo,
                             ChallengeParticipantRepository participantRepo,
                             TaskRepository taskRepo, UserRepository userRepo,
-                            SubmissionRepository submissionRepo) {
+                            SubmissionRepository submissionRepo,
+                            NotificationService notificationService) {
         this.challengeRepo = challengeRepo;
         this.participantRepo = participantRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
         this.submissionRepo = submissionRepo;
+        this.notificationService = notificationService;
     }
 
     public List<ChallengeDto> findActive(String username) {
@@ -61,6 +64,7 @@ public class ChallengeService {
         ch.setCreatedBy(author);
         ch.setTasks(taskRepo.findAllById(req.taskIds()));
         challengeRepo.save(ch);
+        notificationService.notifyAllStudents("Новый челлендж", ch.getTitle());
 
         return toDto(ch, author.getId(), LocalDateTime.now());
     }

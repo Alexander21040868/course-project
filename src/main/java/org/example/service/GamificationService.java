@@ -19,17 +19,20 @@ public class GamificationService {
     private final UserAchievementRepository userAchievementRepo;
     private final SubmissionRepository submissionRepo;
     private final TaskRepository taskRepo;
+    private final NotificationService notificationService;
 
     public GamificationService(UserRepository userRepo,
                                AchievementRepository achievementRepo,
                                UserAchievementRepository userAchievementRepo,
                                SubmissionRepository submissionRepo,
-                               TaskRepository taskRepo) {
+                               TaskRepository taskRepo,
+                               NotificationService notificationService) {
         this.userRepo = userRepo;
         this.achievementRepo = achievementRepo;
         this.userAchievementRepo = userAchievementRepo;
         this.submissionRepo = submissionRepo;
         this.taskRepo = taskRepo;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -122,6 +125,8 @@ public class GamificationService {
                 ua.setUser(user);
                 ua.setAchievement(achievement);
                 userAchievementRepo.save(ua);
+                notificationService.notifyUser(user.getId(), "Новое достижение",
+                        achievement.getName() + " — " + (achievement.getDescription() != null ? achievement.getDescription() : ""));
 
                 addXp(user, achievement.getXpReward());
                 result.add(new AchievementDto(

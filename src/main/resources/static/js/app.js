@@ -1,8 +1,22 @@
 document.addEventListener('DOMContentLoaded', () => {
     if (!localStorage.getItem('cq_token')) { window.location.href = '/index.html'; return; }
 
-    const state = { currentView: 'quests', currentLessonId: null, currentTaskId: null, profile: null };
+    const state = {
+        currentView: 'quests', currentLessonId: null, currentTaskId: null, profile: null,
+        lastSubmitOutput: '', libraryArticles: [], selectedArticleId: null
+    };
     const $ = id => document.getElementById(id);
+
+    function applyTheme(light) {
+        document.body.classList.toggle('light', light);
+        localStorage.setItem('cq_theme', light ? 'light' : 'dark');
+        const cmLink = $('cmThemeLight');
+        if (cmLink) cmLink.media = light ? 'all' : 'none';
+        $('themeToggle').textContent = light ? '🌙 Тёмная' : '☀️ Светлая';
+        if (state.cm) state.cm.setOption('theme', light ? 'eclipse' : 'material-darker');
+    }
+    applyTheme(localStorage.getItem('cq_theme') === 'light');
+    $('themeToggle').addEventListener('click', () => applyTheme(!document.body.classList.contains('light')));
 
     // ── Navigation ──
     document.querySelectorAll('.nav-item[data-view]').forEach(btn =>
@@ -27,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const titles = {
-        quests:'Карта подземелий', catalog:'Каталог задач', lesson:'Подземелье', task:'Битва',
+        quests:'Карта подземелий', library:'Библиотека', catalog:'Каталог задач', lesson:'Подземелье', task:'Битва',
         challenges:'Арена', leaderboard:'Лидерборд', achievements:'Зал славы',
         profile:'Личный кабинет', admin:'Штаб мастера'
     };
@@ -42,6 +56,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('viewTitle').textContent = titles[view] || '';
 
         if (view === 'quests') { loadLessons(); loadDailyTask(); }
+        if (view === 'library') loadLibrary($('librarySearch').value || '');
         if (view === 'catalog') loadCatalog('');
         if (view === 'achievements') loadAchievements();
         if (view === 'challenges') loadChallenges();
@@ -72,7 +87,97 @@ document.addEventListener('DOMContentLoaded', () => {
             $('xpFill').style.width = Math.max(5, pct) + '%';
             if (p.role === 'TEACHER') $('adminNav').style.display = '';
             $('avatar').textContent = p.role === 'TEACHER' ? '🧙' : '⚔';
+            refreshNotifCount();
         } catch (e) { console.error(e); }
+    }
+
+    async function refreshNotifCount() {
+        try {
+            const c = await API.get('/notifications/count');
+            if (!c) return;
+            const n = c.unread || 0;
+            const b = $('notifBadge');
+            if (n > 0) { b.textContent = n > 9 ? '9+' : n; b.style.display = ''; }
+            else b.style.display = 'none';
+        } catch (e) { /* ignore */ }
+    }
+
+    async function openNotifDropdown() {
+        const dd = $('notifDropdown');
+        try {
+            const list = await API.get('/notifications') || [];
+            if (!list.length) dd.innerHTML = '<div class="notif-empty">Нет новых уведомлений</div>';
+            else {
+                dd.innerHTML = list.map(n => `
+                    <div class="notif-item" data-nid="${n.id}">
+                        <strong>${esc(n.title)}</strong>
+                        <p>${esc(n.message)}</p>
+                    </div>`).join('');
+                dd.querySelectorAll('.notif-item').forEach(el => el.addEventListener('click', async () => {
+                    try {
+                        await fetch(API.base + '/notifications/' + el.dataset.nid + '/read', {
+                            method: 'PUT', headers: API.headers()
+                        });
+                        el.remove();
+                        refreshNotifCount();
+                        if (!$('notifDropdown').querySelector('.notif-item')) $('notifDropdown').innerHTML = '<div class="notif-empty">Нет новых уведомлений</div>';
+                    } catch (e) { console.error(e); }
+                }));
+            }
+            dd.style.display = 'block';
+        } catch (e) { dd.innerHTML = '<div class="notif-empty">Ошибка загрузки</div>'; dd.style.display = 'block'; }
+    }
+
+    $('notifBell').addEventListener('click', e => {
+        e.stopPropagation();
+        const dd = $('notifDropdown');
+        if (dd.style.display === 'block') { dd.style.display = 'none'; return; }
+        openNotifDropdown();
+    });
+    document.addEventListener('click', () => { $('notifDropdown').style.display = 'none'; });
+
+    let libTimer;
+    $('librarySearch').addEventListener('input', () => {
+        clearTimeout(libTimer);
+        libTimer = setTimeout(() => loadLibrary($('librarySearch').value), 300);
+    });
+
+    async function loadLibrary(q) {
+        const listEl = $('libraryList');
+        const artEl = $('libraryArticle');
+        listEl.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+        try {
+            const path = '/articles' + (q ? '?q=' + encodeURIComponent(q) : '');
+            const items = await API.get(path) || [];
+            state.libraryArticles = items;
+            if (!items.length) {
+                listEl.innerHTML = '<p class="empty-hint">Ничего не найдено</p>';
+                return;
+            }
+            listEl.innerHTML = items.map(a => `
+                <button type="button" class="library-card ${state.selectedArticleId === a.id ? 'active' : ''}" data-aid="${a.id}">
+                    <div class="lc-cat">${esc(a.category)}</div>
+                    <div class="lc-title">${esc(a.title)}</div>
+                </button>`).join('');
+            listEl.querySelectorAll('.library-card').forEach(btn => btn.addEventListener('click', () => openArticle(+btn.dataset.aid)));
+            if (state.selectedArticleId && items.some(x => x.id === state.selectedArticleId)) openArticle(state.selectedArticleId);
+            else { artEl.innerHTML = '<p class="empty-hint">Выберите статью слева</p>'; state.selectedArticleId = null; }
+        } catch (e) { listEl.innerHTML = `<p class="empty-hint">${esc(e.message)}</p>`; }
+    }
+
+    async function openArticle(id) {
+        state.selectedArticleId = id;
+        $('libraryList').querySelectorAll('.library-card').forEach(c => c.classList.toggle('active', +c.dataset.aid === id));
+        const artEl = $('libraryArticle');
+        artEl.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+        try {
+            const a = await API.get('/articles/' + id);
+            const raw = mdFromApi(a.content);
+            const html = typeof marked !== 'undefined'
+                ? marked.parse(raw, { breaks: true })
+                : esc(raw);
+            artEl.innerHTML = `<div class="md-content">${html}</div>`;
+        } catch (e) { artEl.innerHTML = `<p class="empty-hint">${esc(e.message)}</p>`; }
     }
 
     function getTitle(level) {
@@ -232,8 +337,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function openTask(id) {
         state.currentTaskId = id;
+        state.lastSubmitOutput = '';
         showView('task'); $('viewTitle').textContent = 'Битва';
         $('resultPanel').classList.remove('visible','correct','wrong');
+        $('hintAiPanel').style.display = 'none';
+        $('hintLocalNote').style.display = 'none';
         try {
             const t = await API.get('/tasks/' + id);
             $('taskTitle').textContent = `#${t.id} ${t.title}`;
@@ -289,6 +397,19 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { $('taskHistoryBox').style.display = 'none'; }
     }
 
+    $('hintAiBtn').addEventListener('click', async () => {
+        if (!state.currentTaskId) return;
+        const code = state.cm ? state.cm.getValue() : $('codeEditor').value;
+        try {
+            const h = await API.post('/ai/hint', { taskId: state.currentTaskId, code, output: state.lastSubmitOutput || undefined });
+            if (!h) return;
+            $('hintLocalNote').style.display = '';
+            const p = $('hintAiPanel');
+            p.style.display = '';
+            p.textContent = h.hint;
+        } catch (e) { showToast('🤖', 'Подсказка', e.message); }
+    });
+
     // ── Submit ──
     $('submitBtn').addEventListener('click', async () => {
         const code = (state.cm ? state.cm.getValue() : $('codeEditor').value).trim();
@@ -301,6 +422,7 @@ document.addEventListener('DOMContentLoaded', () => {
             rp.classList.add('visible', res.status === 'CORRECT' ? 'correct' : 'wrong');
             $('resultHeader').textContent = res.status === 'CORRECT' ? '✅ ПОБЕДА!' : '❌ Неверно';
             $('resultBody').textContent = res.output;
+            state.lastSubmitOutput = res.output || '';
             $('resultTests').innerHTML = (res.testResults || []).length
                 ? '<div class="test-results">' + res.testResults.map(tr =>
                     `<span class="test-badge ${tr.passed?'pass':'fail'}">#${tr.testNumber} ${tr.passed?'✓':'✗'}</span>`
@@ -311,6 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loadProfile();
             loadTaskHistory(state.currentTaskId);
         } catch (e) {
+            state.lastSubmitOutput = e.message || '';
             $('resultPanel').classList.add('visible','wrong');
             $('resultHeader').textContent = '⚠ Ошибка'; $('resultBody').textContent = e.message;
         } finally { $('submitBtn').disabled = false; $('submitSpinner').style.display = 'none'; }
@@ -381,9 +504,22 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const students = await API.get('/admin/students');
             if (!students.length) { el.innerHTML = '<p style="color:var(--text-dim)">Нет студентов</p>'; return; }
-            el.innerHTML = '<table class="results-table"><tr><th>Герой</th><th>XP</th><th>LVL</th><th>Решено</th><th>Прогресс</th></tr>' +
-                students.map(s => `<tr><td>${esc(s.username)}</td><td>${s.xp}</td><td>${s.level}</td><td>${s.totalSolved}/${s.totalTasks}</td><td><div class="mini-bar"><div class="mini-fill" style="width:${s.solvedPercent}%"></div></div></td></tr>`).join('') + '</table>';
+            el.innerHTML = '<table class="results-table"><tr><th>Герой</th><th>XP</th><th>LVL</th><th>Решено</th><th>Прогресс</th><th>Отчёт</th></tr>' +
+                students.map(s => `<tr><td>${esc(s.username)}</td><td>${s.xp}</td><td>${s.level}</td><td>${s.totalSolved}/${s.totalTasks}</td><td><div class="mini-bar"><div class="mini-fill" style="width:${s.solvedPercent}%"></div></div></td><td><button type="button" class="btn-pdf" data-uid="${s.userId}">PDF</button></td></tr>`).join('') + '</table>';
+            el.querySelectorAll('.btn-pdf').forEach(b => b.addEventListener('click', () => downloadStudentPdf(+b.dataset.uid)));
         } catch (e) { el.innerHTML = '<p>Ошибка</p>'; }
+    }
+
+    async function downloadStudentPdf(userId) {
+        try {
+            const blob = await API.getBlob('/admin/students/' + userId + '/export-pdf');
+            if (!blob) return;
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'codequest-progress.pdf';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } catch (e) { alert(e.message); }
     }
 
     $('createLessonForm').addEventListener('submit', async e => {
@@ -402,10 +538,25 @@ document.addEventListener('DOMContentLoaded', () => {
             e.target.reset(); showToast('🏟','Челлендж создан','');
         } catch(err) { alert(err.message); }
     });
+    $('createArticleForm').addEventListener('submit', async e => {
+        e.preventDefault(); const fd = new FormData(e.target);
+        try {
+            await API.post('/admin/articles', {
+                title: fd.get('title'), content: fd.get('content'),
+                category: fd.get('category') || 'Справочник', orderIndex: +fd.get('orderIndex')
+            });
+            e.target.reset(); showToast('📚', 'Статья опубликована', '');
+        } catch (err) { alert(err.message); }
+    });
 
     // ── Helpers ──
     function diffLabel(d) { return { EASY:'🟢 Лёгкая', MEDIUM:'🟡 Средняя', HARD:'🔴 Сложная' }[d] || d; }
     function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    /** SQL-строки часто хранят буквальные \n вместо перевода строки — иначе Markdown ломается */
+    function mdFromApi(s) {
+        if (!s) return '';
+        return s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\r/g, '\r');
+    }
     function showToast(icon, title, desc) {
         const t = document.createElement('div'); t.className = 'toast';
         t.innerHTML = `<span class="toast-icon">${icon}</span><div class="toast-text"><h4>${esc(title)}</h4><p>${esc(desc)}</p></div>`;
@@ -418,7 +569,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── CodeMirror ──
     if (typeof CodeMirror !== 'undefined') {
         state.cm = CodeMirror.fromTextArea($('codeEditor'), {
-            mode: 'text/x-csrc', theme: 'material-darker',
+            mode: 'text/x-csrc',
+            theme: document.body.classList.contains('light') ? 'eclipse' : 'material-darker',
             lineNumbers: false, tabSize: 4, indentWithTabs: false,
             matchBrackets: true, lineWrapping: true
         });
