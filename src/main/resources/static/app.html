@@ -16,6 +16,7 @@
 
     <div class="app">
         <aside class="sidebar">
+            <div class="sidebar-top">
             <div class="sidebar-logo">&lt;CQ/&gt;</div>
             <div class="char-card" style="cursor:pointer" id="charCardLink">
                 <div class="avatar" id="avatar">⚔</div>
@@ -38,7 +39,9 @@
                 <div class="nav-divider"></div>
                 <button class="nav-item" data-view="admin" id="adminNav" style="display:none"><span class="nav-icon">⚙</span> Управление</button>
             </nav>
+            </div>
             <div class="sidebar-footer">
+                <button type="button" class="theme-toggle" id="muteBtn" title="Звуковые эффекты">🔊 Звук</button>
                 <button type="button" class="theme-toggle" id="themeToggle" title="Тема">🌙 Тёмная</button>
                 <button class="logout-btn" id="logoutBtn">↩ Покинуть игру</button>
             </div>
@@ -65,6 +68,7 @@
             <div class="view active" id="view-quests">
                 <div id="dailyTaskCard" class="daily-card" style="display:none"></div>
                 <div class="quest-map" id="questMap"></div>
+                <div class="pager-row" id="questPager" style="display:none"></div>
             </div>
 
             <!-- LESSON -->
@@ -131,6 +135,7 @@
                     <input type="text" id="catalogSearch" placeholder="Поиск по названию задачи..." autocomplete="off">
                 </div>
                 <div class="task-list" id="catalogList"></div>
+                <div class="pager-row" id="catalogPager" style="display:none"></div>
             </div>
 
             <!-- LEADERBOARD -->

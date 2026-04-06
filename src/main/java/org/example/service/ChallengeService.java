@@ -3,6 +3,8 @@ package org.example.service;
 import org.example.dto.*;
 import org.example.entity.*;
 import org.example.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Transactional(readOnly = true)
 public class ChallengeService {
 
+    private static final Logger log = LoggerFactory.getLogger(ChallengeService.class);
     private static final int K = 40;
 
     private final ChallengeRepository challengeRepo;
@@ -64,6 +67,7 @@ public class ChallengeService {
         ch.setCreatedBy(author);
         ch.setTasks(taskRepo.findAllById(req.taskIds()));
         challengeRepo.save(ch);
+        log.info("Челлендж создан: id={} «{}»", ch.getId(), ch.getTitle());
         notificationService.notifyAllStudents("Новый челлендж", ch.getTitle());
 
         return toDto(ch, author.getId(), LocalDateTime.now());

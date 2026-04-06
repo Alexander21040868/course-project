@@ -39,11 +39,14 @@ body::before {
 }
 
 /* ── LAYOUT ── */
+/* Вся прокрутка — только в .main-content; сайдбар на всю высоту окна */
 .app {
     display: grid;
-    grid-template-columns: 260px 1fr;
+    grid-template-columns: 220px 1fr;
     grid-template-rows: auto 1fr;
-    min-height: 100vh;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
     position: relative;
     z-index: 1;
 }
@@ -51,13 +54,39 @@ body::before {
 /* ── SIDEBAR ── */
 .sidebar {
     grid-row: 1 / -1;
+    align-self: stretch;
+    min-height: 0;
     background: var(--surface);
     border-right: 1px solid var(--border);
-    padding: 24px 16px;
+    padding: 24px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    z-index: 15;
+    position: relative;
+}
+
+/* Прокрутка только у лого / профиля / меню; звук, тема и выход всегда внизу экрана */
+.sidebar-top {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 24px;
-    overflow-y: auto;
+    padding-bottom: 8px;
+}
+/* Ширина колонки сайдбара не меняется: бегунок визуально правее за счёт «пустой» зоны слева в дорожке (Chrome/Safari/Edge) */
+.sidebar-top::-webkit-scrollbar {
+    width: 12px;
+}
+.sidebar-top::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+    border-left: 6px solid transparent;
+    background-clip: padding-box;
 }
 
 .sidebar-logo {
@@ -149,8 +178,8 @@ body::before {
 /* nav */
 .nav { display: flex; flex-direction: column; gap: 4px; }
 .nav-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px;
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 5px;
     border-radius: 8px;
     font-size: 13px;
     cursor: pointer;
@@ -180,7 +209,10 @@ body::before {
 }
 
 .sidebar-footer {
-    margin-top: auto;
+    flex-shrink: 0;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -224,6 +256,7 @@ body::before {
     background: var(--surface);
     position: relative;
     z-index: 20;
+    flex-shrink: 0;
 }
 .topbar-title {
     font-family: var(--pixel);
@@ -305,7 +338,9 @@ body::before {
 /* ── MAIN CONTENT ── */
 .main-content {
     padding: 28px 32px;
+    min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 /* ── VIEWS ── */
@@ -735,12 +770,17 @@ body::before {
 @media (max-width: 768px) {
     .app {
         grid-template-columns: 1fr;
+        height: auto;
+        max-height: none;
+        min-height: 100vh;
+        overflow: visible;
     }
     .sidebar {
         display: none;
     }
     .main-content {
         padding: 16px;
+        overflow-y: visible;
     }
 }
 
@@ -955,6 +995,28 @@ body::before {
     cursor: pointer;
 }
 .btn-hint:hover { background: rgba(168,85,247,.2); }
+.pager-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+.pager-btn {
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+}
+.pager-btn:hover:not(:disabled) { border-color: var(--cyan-dim); color: var(--cyan); }
+.pager-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pager-info { font-size: 12px; color: var(--text-dim); }
+
 .btn-pdf {
     padding: 4px 10px;
     font-size: 11px;

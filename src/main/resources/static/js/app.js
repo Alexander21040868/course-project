@@ -1,11 +1,75 @@
+/** Звуки через Web Audio (TODO 3.4): без mp3, работает после первого клика пользователя. */
+(function () {
+    const KEY = 'cq_mute';
+    window.CQSound = {
+        _ctx: null,
+        muted() { return localStorage.getItem(KEY) === '1'; },
+        setMuted(m) { localStorage.setItem(KEY, m ? '1' : '0'); },
+        _ensureCtx() {
+            if (!this._ctx) this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+            return this._ctx;
+        },
+        async _resume() {
+            const c = this._ensureCtx();
+            if (c.state === 'suspended') await c.resume();
+        },
+        _tone(freq, dur, type = 'square', vol = 0.07) {
+            if (this.muted()) return;
+            const c = this._ensureCtx();
+            const o = c.createOscillator();
+            const g = c.createGain();
+            o.type = type;
+            o.frequency.value = freq;
+            const t0 = c.currentTime;
+            g.gain.setValueAtTime(vol, t0);
+            g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+            o.connect(g);
+            g.connect(c.destination);
+            o.start(t0);
+            o.stop(t0 + dur);
+        },
+        async success() {
+            await this._resume();
+            this._tone(523, 0.1);
+            setTimeout(() => this._tone(784, 0.12), 70);
+        },
+        async fail() {
+            await this._resume();
+            this._tone(146, 0.22, 'sawtooth', 0.055);
+        },
+        async achievement() {
+            await this._resume();
+            this._tone(660, 0.08);
+            setTimeout(() => this._tone(988, 0.1), 60);
+        },
+        async levelUp() {
+            await this._resume();
+            this._tone(392, 0.1);
+            setTimeout(() => this._tone(523, 0.1), 90);
+            setTimeout(() => this._tone(784, 0.18), 190);
+        }
+    };
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
     if (!localStorage.getItem('cq_token')) { window.location.href = '/index.html'; return; }
 
     const state = {
         currentView: 'quests', currentLessonId: null, currentTaskId: null, profile: null,
-        lastSubmitOutput: '', libraryArticles: [], selectedArticleId: null
+        lastSubmitOutput: '', libraryArticles: [], selectedArticleId: null,
+        lessonPage: 0, catalogPage: 0
     };
     const $ = id => document.getElementById(id);
+
+    function syncMuteBtn() {
+        const b = $('muteBtn');
+        if (b) b.textContent = CQSound.muted() ? '🔇 Тишина' : '🔊 Звук';
+    }
+    syncMuteBtn();
+    $('muteBtn').addEventListener('click', () => {
+        CQSound.setMuted(!CQSound.muted());
+        syncMuteBtn();
+    });
 
     function applyTheme(light) {
         document.body.classList.toggle('light', light);
@@ -37,7 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let catalogTimer;
     $('catalogSearch').addEventListener('input', () => {
         clearTimeout(catalogTimer);
-        catalogTimer = setTimeout(() => loadCatalog($('catalogSearch').value), 300);
+        catalogTimer = setTimeout(() => { state.catalogPage = 0; loadCatalog($('catalogSearch').value || '', 0); }, 300);
     });
 
     const titles = {
@@ -57,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (view === 'quests') { loadLessons(); loadDailyTask(); }
         if (view === 'library') loadLibrary($('librarySearch').value || '');
-        if (view === 'catalog') loadCatalog('');
+        if (view === 'catalog') { state.catalogPage = 0; loadCatalog($('catalogSearch').value || '', 0); }
         if (view === 'achievements') loadAchievements();
         if (view === 'challenges') loadChallenges();
         if (view === 'leaderboard') loadLeaderboard();
@@ -229,14 +293,24 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { el.innerHTML = `<div class="empty-state"><p>Ошибка: ${esc(e.message)}</p></div>`; }
     }
 
-    // ── Catalog (пул задач) ──
-    async function loadCatalog(search) {
+    // ── Catalog (пул задач, пагинация TODO 5.1) ──
+    async function loadCatalog(search, page) {
+        const pg = page ?? state.catalogPage;
+        state.catalogPage = pg;
         const el = $('catalogList');
+        const pagerEl = $('catalogPager');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
-            const url = search ? '/tasks?search=' + encodeURIComponent(search) : '/tasks';
-            const tasks = await API.get(url);
-            if (!tasks.length) { el.innerHTML = '<div class="empty-state"><p>Задачи не найдены</p></div>'; return; }
+            const q = new URLSearchParams({ page: String(pg), size: '12' });
+            if (search) q.set('search', search);
+            const data = await API.get('/tasks?' + q.toString());
+            const tasks = data.content ?? data;
+            const totalPages = data.totalPages ?? 1;
+            if (!tasks.length) {
+                el.innerHTML = '<div class="empty-state"><p>Задачи не найдены</p></div>';
+                pagerEl.style.display = 'none';
+                return;
+            }
             el.innerHTML = tasks.map(t => `
                 <div class="task-item" data-id="${t.id}">
                     <div class="task-id-badge">#${t.id}</div>
@@ -250,7 +324,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>`).join('');
             el.querySelectorAll('.task-item').forEach(i =>
                 i.addEventListener('click', () => openTask(+i.dataset.id)));
-        } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; }
+            if (totalPages > 1) {
+                pagerEl.style.display = 'flex';
+                pagerEl.innerHTML = `
+                    <button type="button" class="pager-btn" ${pg <= 0 ? 'disabled' : ''} data-cp="${pg - 1}">← Назад</button>
+                    <span class="pager-info">${pg + 1} / ${totalPages}</span>
+                    <button type="button" class="pager-btn" ${pg >= totalPages - 1 ? 'disabled' : ''} data-cp="${pg + 1}">Вперёд →</button>`;
+                pagerEl.querySelectorAll('[data-cp]').forEach(b => b.addEventListener('click', () => {
+                    if (b.disabled) return;
+                    loadCatalog(search, +b.dataset.cp);
+                }));
+            } else pagerEl.style.display = 'none';
+        } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; pagerEl.style.display = 'none'; }
     }
 
     // ── Leaderboard ──
@@ -296,13 +381,22 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { $('dailyTaskCard').style.display = 'none'; }
     }
 
-    // ── Lessons ──
-    async function loadLessons() {
+    // ── Lessons (пагинация TODO 5.1) ──
+    async function loadLessons(page) {
+        if (page !== undefined) state.lessonPage = page;
+        const pg = state.lessonPage;
         const el = $('questMap');
+        const pagerEl = $('questPager');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
-            const lessons = await API.get('/lessons');
-            if (!lessons.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗺</div><p>Подземелья не созданы.</p></div>'; return; }
+            const data = await API.get('/lessons?page=' + pg + '&size=8');
+            const lessons = data.content ?? data;
+            const totalPages = data.totalPages ?? 1;
+            if (!lessons.length) {
+                el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗺</div><p>Подземелья не созданы.</p></div>';
+                pagerEl.style.display = 'none';
+                return;
+            }
             el.innerHTML = lessons.map(l => `
                 <div class="quest-card" data-id="${l.id}">
                     <div class="quest-order">ПОДЗЕМЕЛЬЕ #${l.orderIndex + 1}</div>
@@ -311,7 +405,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="quest-meta"><span>⚔ ${l.taskCount} задач</span></div>
                 </div>`).join('');
             el.querySelectorAll('.quest-card').forEach(c => c.addEventListener('click', () => openLesson(+c.dataset.id)));
-        } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; }
+            if (totalPages > 1) {
+                pagerEl.style.display = 'flex';
+                pagerEl.innerHTML = `
+                    <button type="button" class="pager-btn" ${pg <= 0 ? 'disabled' : ''} data-lp="${pg - 1}">← Назад</button>
+                    <span class="pager-info">${pg + 1} / ${totalPages}</span>
+                    <button type="button" class="pager-btn" ${pg >= totalPages - 1 ? 'disabled' : ''} data-lp="${pg + 1}">Вперёд →</button>`;
+                pagerEl.querySelectorAll('[data-lp]').forEach(b => b.addEventListener('click', () => {
+                    if (b.disabled) return;
+                    loadLessons(+b.dataset.lp);
+                }));
+            } else pagerEl.style.display = 'none';
+        } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; pagerEl.style.display = 'none'; }
     }
 
     async function openLesson(id) {
@@ -429,11 +534,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 ).join('') + '</div>' : '';
             if (res.xpEarned > 0) { $('resultXp').textContent = '+ ' + res.xpEarned + ' XP!'; $('resultXp').style.display = ''; }
             else { $('resultXp').style.display = 'none'; }
-            if (res.newAchievements) res.newAchievements.forEach(a => showToast(a.icon, a.name, a.description));
+            if (res.status === 'CORRECT') CQSound.success(); else CQSound.fail();
+            if (res.newAchievements?.length) {
+                CQSound.achievement();
+                res.newAchievements.forEach(a => showToast(a.icon, a.name, a.description));
+            }
             loadProfile();
             loadTaskHistory(state.currentTaskId);
         } catch (e) {
             state.lastSubmitOutput = e.message || '';
+            CQSound.fail();
             $('resultPanel').classList.add('visible','wrong');
             $('resultHeader').textContent = '⚠ Ошибка'; $('resultBody').textContent = e.message;
         } finally { $('submitBtn').disabled = false; $('submitSpinner').style.display = 'none'; }
@@ -584,6 +694,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await origLoadProfile();
         if (state.profile) {
             if (prevLevel !== null && state.profile.level > prevLevel) {
+                CQSound.levelUp();
                 $('levelUpLevel').textContent = state.profile.level;
                 $('levelUpOverlay').style.display = 'flex';
                 setTimeout(() => $('levelUpOverlay').style.display = 'none', 2500);

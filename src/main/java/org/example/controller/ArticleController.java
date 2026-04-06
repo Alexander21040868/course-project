@@ -19,12 +19,12 @@ public class ArticleController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ArticleSummaryDto>> list(@RequestParam(required = false) String q) {
+    public ResponseEntity<List<ArticleSummaryDto>> list(@RequestParam(value = "q", required = false) String q) {
         return ResponseEntity.ok(articleService.search(q));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ArticleDto> get(@PathVariable Long id) {
+    public ResponseEntity<ArticleDto> get(@PathVariable("id") Long id) {
         return ResponseEntity.ok(articleService.findById(id));
     }
 }

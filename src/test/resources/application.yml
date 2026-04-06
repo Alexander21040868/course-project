@@ -1,0 +1,7 @@
+# Тесты: без Docker. Полный блок app нужен — иначе тестовый YAML перезапишет app из main и пропадёт jwt.
+app:
+  jwt:
+    secret: Y29kZXF1ZXN0LXNlY3JldC1rZXktZm9yLWp3dC10b2tlbi1nZW5lcmF0aW9uLTIwMjQ=
+    expiration-ms: 86400000
+  code-execution:
+    enabled: false

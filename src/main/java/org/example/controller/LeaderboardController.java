@@ -26,7 +26,8 @@ public class LeaderboardController {
     }
 
     @GetMapping
-    public ResponseEntity<List<LeaderboardEntryDto>> get(@RequestParam(defaultValue = "rating") String sort) {
+    public ResponseEntity<List<LeaderboardEntryDto>> get(
+            @RequestParam(value = "sort", defaultValue = "rating") String sort) {
         var users = "xp".equals(sort)
                 ? userRepo.findTop50ByRoleOrderByXpDesc(Role.STUDENT)
                 : userRepo.findTop50ByRoleOrderByRatingDesc(Role.STUDENT);

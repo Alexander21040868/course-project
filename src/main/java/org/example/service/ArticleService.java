@@ -7,6 +7,8 @@ import org.example.entity.Article;
 import org.example.entity.User;
 import org.example.repository.ArticleRepository;
 import org.example.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +17,8 @@ import java.util.List;
 @Service
 @Transactional(readOnly = true)
 public class ArticleService {
+
+    private static final Logger log = LoggerFactory.getLogger(ArticleService.class);
 
     private final ArticleRepository articleRepo;
     private final UserRepository userRepo;
@@ -48,7 +52,9 @@ public class ArticleService {
         a.setCategory(req.category() != null && !req.category().isBlank() ? req.category().trim() : "Справочник");
         a.setOrderIndex(req.orderIndex());
         a.setAuthor(author);
-        return toDto(articleRepo.save(a));
+        Article saved = articleRepo.save(a);
+        log.info("Статья создана: id={} «{}»", saved.getId(), saved.getTitle());
+        return toDto(saved);
     }
 
     @Transactional
@@ -59,11 +65,13 @@ public class ArticleService {
         a.setContent(req.content());
         a.setCategory(req.category() != null && !req.category().isBlank() ? req.category().trim() : "Справочник");
         a.setOrderIndex(req.orderIndex());
+        log.info("Статья обновлена: id={}", id);
         return toDto(articleRepo.save(a));
     }
 
     @Transactional
     public void delete(Long id) {
+        log.info("Статья удалена: id={}", id);
         articleRepo.deleteById(id);
     }
 

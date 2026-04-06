@@ -7,14 +7,18 @@ import org.example.entity.User;
 import org.example.repository.LessonRepository;
 import org.example.repository.TaskRepository;
 import org.example.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
 public class LessonService {
+
+    private static final Logger log = LoggerFactory.getLogger(LessonService.class);
 
     private final LessonRepository lessonRepo;
     private final TaskRepository taskRepo;
@@ -29,10 +33,9 @@ public class LessonService {
         this.notificationService = notificationService;
     }
 
-    public List<LessonDto> findAll() {
-        return lessonRepo.findAllByOrderByOrderIndexAsc().stream()
-                .map(this::toDto)
-                .toList();
+    public Page<LessonDto> findPage(int page, int size) {
+        return lessonRepo.findAllByOrderByOrderIndexAsc(PageRequest.of(page, size))
+                .map(this::toDto);
     }
 
     public LessonDto findById(Long id) {
@@ -54,6 +57,7 @@ public class LessonService {
         lesson.setAuthor(author);
 
         Lesson saved = lessonRepo.save(lesson);
+        log.info("Урок создан: id={} title={}", saved.getId(), saved.getTitle());
         notificationService.notifyAllStudents("Новый урок", "Опубликовано подземелье: " + saved.getTitle());
         return toDto(saved);
     }
@@ -66,11 +70,14 @@ public class LessonService {
         lesson.setDescription(req.description());
         lesson.setContent(req.content());
         lesson.setOrderIndex(req.orderIndex());
-        return toDto(lessonRepo.save(lesson));
+        Lesson saved = lessonRepo.save(lesson);
+        log.info("Урок обновлён: id={}", id);
+        return toDto(saved);
     }
 
     @Transactional
     public void delete(Long id) {
+        log.info("Урок удалён: id={}", id);
         lessonRepo.deleteById(id);
     }
 

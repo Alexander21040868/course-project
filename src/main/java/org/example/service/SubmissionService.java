@@ -9,7 +9,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SubmissionService {
@@ -21,15 +23,18 @@ public class SubmissionService {
     private final UserRepository userRepo;
     private final TestCaseRepository testCaseRepo;
     private final GamificationService gamificationService;
+    private final DockerCExecutionService cExec;
 
     public SubmissionService(SubmissionRepository submissionRepo, TaskRepository taskRepo,
                              UserRepository userRepo, TestCaseRepository testCaseRepo,
-                             GamificationService gamificationService) {
+                             GamificationService gamificationService,
+                             DockerCExecutionService cExec) {
         this.submissionRepo = submissionRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
         this.testCaseRepo = testCaseRepo;
         this.gamificationService = gamificationService;
+        this.cExec = cExec;
     }
 
     @Transactional
@@ -56,21 +61,27 @@ public class SubmissionService {
             total = testCases.size();
             for (int i = 0; i < testCases.size(); i++) {
                 TestCase tc = testCases.get(i);
-                boolean ok = checkAgainstTest(req.code(), tc);
-                if (ok) passed++;
+                TestEval ev = evaluateAgainstTest(req.code(), tc);
+                if (ev.passed()) {
+                    passed++;
+                }
                 testResults.add(new TestResultDto(
-                        i + 1, ok,
+                        i + 1, ev.passed(),
                         tc.isSample() ? tc.getInput() : null,
                         tc.isSample() ? tc.getExpectedOutput() : null,
-                        tc.isSample() && !ok ? "(ваш вывод не совпадает)" : null,
+                        tc.isSample() && !ev.passed() ? shorten(ev.detail(), 600) : null,
                         tc.isSample()
                 ));
             }
         } else {
             total = 1;
-            boolean ok = checkLegacy(req.code(), task);
-            if (ok) passed = 1;
-            testResults.add(new TestResultDto(1, ok, null, task.getExpectedOutput(), null, true));
+            TestEval ev = evaluateLegacy(req.code(), task);
+            if (ev.passed()) {
+                passed = 1;
+            }
+            testResults.add(new TestResultDto(
+                    1, ev.passed(), null, task.getExpectedOutput(),
+                    !ev.passed() ? shorten(ev.detail(), 600) : null, true));
         }
 
         boolean correct = passed == total;
@@ -113,44 +124,94 @@ public class SubmissionService {
                 .toList();
     }
 
-    private boolean checkAgainstTest(String code, TestCase tc) {
-        String expected = tc.getExpectedOutput().trim();
-        String normalizedCode = code.trim();
+    private record TestEval(boolean passed, String detail) {}
 
-        if (normalizedCode.isEmpty() || !normalizedCode.contains("main")) {
-            return false;
+    private TestEval evaluateAgainstTest(String code, TestCase tc) {
+        String expectedRaw = tc.getExpectedOutput();
+        if (expectedRaw == null || expectedRaw.isBlank()) {
+            return new TestEval(false, "У теста пустой ожидаемый вывод.");
+        }
+        String c = code == null ? "" : code.trim();
+        if (c.isEmpty() || !c.contains("main")) {
+            return new TestEval(false, "Нужен непустой код с функцией main.");
         }
 
-        return containsExpectedLogic(normalizedCode, expected);
+        String expected = normalizeExpected(expectedRaw);
+        String stdin = tc.getInput() == null ? "" : tc.getInput();
+        CExecutionResult r = cExec.compileAndRun(c, stdin);
+        return mapExecutionToEval(r, expected);
     }
 
-    private boolean checkLegacy(String code, Task task) {
-        if (task.getExpectedOutput() == null || task.getExpectedOutput().isBlank()) {
-            return !code.isBlank();
+    private TestEval evaluateLegacy(String code, Task task) {
+        String expectedRaw = task.getExpectedOutput();
+        if (expectedRaw == null || expectedRaw.isBlank()) {
+            return new TestEval(false, "Нет тест-кейсов и не задан expected output у задачи.");
         }
-        String normalizedCode = code.trim();
-        if (normalizedCode.isEmpty() || !normalizedCode.contains("main")) {
-            return false;
+        String c = code == null ? "" : code.trim();
+        if (c.isEmpty() || !c.contains("main")) {
+            return new TestEval(false, "Нужен непустой код с функцией main.");
         }
-        return containsExpectedLogic(normalizedCode, task.getExpectedOutput().trim());
+
+        String expected = normalizeExpected(expectedRaw);
+        CExecutionResult r = cExec.compileAndRun(c, "");
+        return mapExecutionToEval(r, expected);
     }
 
-    private boolean containsExpectedLogic(String code, String expected) {
-        String cleaned = expected.replace("\\n", "\n").trim();
-        for (String line : cleaned.split("\n")) {
-            String trimmed = line.trim();
-            if (!trimmed.isEmpty() && code.contains(trimmed)) {
-                return true;
+    private static TestEval mapExecutionToEval(CExecutionResult r, String expected) {
+        return switch (r.kind()) {
+            case DISABLED, DOCKER_ERROR -> new TestEval(false, r.stderrOrCompileLog());
+            case COMPILE_ERROR -> new TestEval(false, "Компиляция:\n" + shorten(r.stderrOrCompileLog(), 1200));
+            case TIMEOUT -> new TestEval(false, r.stderrOrCompileLog());
+            case RUNTIME_ERROR -> new TestEval(false,
+                    "Ошибка выполнения (код/сигнал). stderr:\n"
+                            + shorten(r.stderrOrCompileLog(), 600)
+                            + "\nstdout:\n" + shorten(r.stdout(), 400));
+            case OK -> {
+                if (normalizedMatch(r.stdout(), expected)) {
+                    yield new TestEval(true, null);
+                }
+                yield new TestEval(false,
+                        "Получено:\n" + normalizeOut(r.stdout()) + "\nОжидалось:\n" + normalizeOut(expected));
             }
+        };
+    }
+
+    private static String normalizeExpected(String s) {
+        return s.replace("\\n", "\n").replace("\\t", "\t");
+    }
+
+    private static String normalizeOut(String s) {
+        if (s == null) {
+            return "";
         }
-        if (code.contains("printf") || code.contains("puts") || code.contains("cout")) {
-            String[] keywords = expected.split("\\s+");
-            int matches = 0;
-            for (String kw : keywords) {
-                if (code.contains(kw)) matches++;
-            }
-            return matches >= keywords.length / 2 + 1;
+        return s.replace("\r\n", "\n").replace('\r', '\n').strip();
+    }
+
+    private static boolean normalizedMatch(String actual, String expected) {
+        String a = normalizeOut(actual);
+        String e = normalizeOut(expected);
+        if (a.equals(e)) {
+            return true;
         }
-        return false;
+        // Совпадение по строкам с обрезкой хвостовых пробелов (типичные расхождения printf / \n)
+        return normalizeLines(a).equals(normalizeLines(e));
+    }
+
+    private static String normalizeLines(String s) {
+        if (s == null || s.isEmpty()) {
+            return "";
+        }
+        return Arrays.stream(s.split("\n", -1))
+                .map(String::strip)
+                .collect(Collectors.joining("\n"))
+                .strip();
+    }
+
+    private static String shorten(String s, int max) {
+        if (s == null) {
+            return "";
+        }
+        String t = s.strip();
+        return t.length() <= max ? t : t.substring(0, max) + "…";
     }
 }

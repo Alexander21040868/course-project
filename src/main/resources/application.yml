@@ -29,6 +29,18 @@ app:
     secret: Y29kZXF1ZXN0LXNlY3JldC1rZXktZm9yLWp3dC10b2tlbi1nZW5lcmF0aW9uLTIwMjQ=
     expiration-ms: 86400000
 
+  # Проверка решений: gcc в Docker (Docker Desktop должен быть запущен).
+  # Полный путь к CLI, если в терминале нет docker: переменная APP_CODE_EXECUTION_DOCKER_PATH
+  # или скрипт scripts/codequest-run.sh (добавляет Docker.app в PATH на macOS).
+  code-execution:
+    enabled: true
+    docker-image: gcc:14-bookworm
+    docker-path: ${APP_CODE_EXECUTION_DOCKER_PATH:docker}
+    wall-timeout-ms: 45000
+    run-timeout-sec: 5
+    # true: если Docker не запущен, проверка идёт через локальный gcc (только для доверенной среды)
+    fallback-local-gcc: true
+
 ---
 spring:
   config:

@@ -5,6 +5,8 @@ import org.example.dto.TaskDto;
 import org.example.dto.TestCaseDto;
 import org.example.entity.*;
 import org.example.repository.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,12 +32,13 @@ public class TaskService {
         this.testCaseRepo = testCaseRepo;
     }
 
-    public List<TaskDto> findAll(String search, String username) {
+    public Page<TaskDto> findPage(String search, String username, int page, int size) {
         Long userId = resolveUserId(username);
-        List<Task> tasks = (search != null && !search.isBlank())
-                ? taskRepo.findByTitleContainingIgnoreCaseOrderByIdAsc(search)
-                : taskRepo.findAllByOrderByIdAsc();
-        return tasks.stream().map(t -> toDto(t, userId)).toList();
+        var p = PageRequest.of(page, size);
+        Page<Task> tasks = (search != null && !search.isBlank())
+                ? taskRepo.findByTitleContainingIgnoreCaseOrderByIdAsc(search.trim(), p)
+                : taskRepo.findAllByOrderByIdAsc(p);
+        return tasks.map(t -> toDto(t, userId));
     }
 
     public List<TaskDto> findByLesson(Long lessonId, String username) {

@@ -30,7 +30,7 @@ public class NotificationController {
     }
 
     @PutMapping("/{id}/read")
-    public ResponseEntity<Void> markRead(@PathVariable Long id, Principal principal) {
+    public ResponseEntity<Void> markRead(@PathVariable("id") Long id, Principal principal) {
         notificationService.markRead(id, principal.getName());
         return ResponseEntity.noContent().build();
     }

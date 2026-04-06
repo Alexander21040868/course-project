@@ -28,7 +28,7 @@ public class SubmissionController {
     }
 
     @GetMapping("/task/{taskId}")
-    public ResponseEntity<List<SubmissionHistoryDto>> getTaskHistory(@PathVariable Long taskId,
+    public ResponseEntity<List<SubmissionHistoryDto>> getTaskHistory(@PathVariable("taskId") Long taskId,
                                                                      Principal principal) {
         return ResponseEntity.ok(submissionService.getTaskHistory(taskId, principal.getName()));
     }

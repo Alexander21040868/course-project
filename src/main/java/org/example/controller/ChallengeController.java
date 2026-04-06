@@ -25,13 +25,13 @@ public class ChallengeController {
     }
 
     @PostMapping("/{id}/join")
-    public ResponseEntity<Void> join(@PathVariable Long id, Principal principal) {
+    public ResponseEntity<Void> join(@PathVariable("id") Long id, Principal principal) {
         challengeService.join(id, principal.getName());
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/{id}/results")
-    public ResponseEntity<List<ChallengeResultDto>> getResults(@PathVariable Long id) {
+    public ResponseEntity<List<ChallengeResultDto>> getResults(@PathVariable("id") Long id) {
         return ResponseEntity.ok(challengeService.getResults(id));
     }
 }

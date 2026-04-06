@@ -4,11 +4,14 @@ import org.example.dto.HintRequest;
 import org.example.dto.HintResponse;
 import org.example.entity.Task;
 import org.example.repository.TaskRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Подсказки без внешнего AI: эвристики по тексту кода и условию задачи.
@@ -17,14 +20,20 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class CodeHintService {
 
-    private final TaskRepository taskRepo;
+    private final Function<Long, Optional<Task>> findTaskById;
 
+    @Autowired
     public CodeHintService(TaskRepository taskRepo) {
-        this.taskRepo = taskRepo;
+        this(taskRepo::findById);
+    }
+
+    /** Для тестов без Mockito/Spring Data (обход ограничений Byte Buddy на новых JDK). */
+    CodeHintService(Function<Long, Optional<Task>> findTaskById) {
+        this.findTaskById = findTaskById;
     }
 
     public HintResponse hint(HintRequest req) {
-        Task task = taskRepo.findById(req.taskId())
+        Task task = findTaskById.apply(req.taskId())
                 .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
         String code = req.code() == null ? "" : req.code();
         String out = req.output() == null ? "" : req.output().toLowerCase();

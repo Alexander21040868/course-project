@@ -42,13 +42,13 @@ public class AdminController {
     }
 
     @PutMapping("/lessons/{id}")
-    public ResponseEntity<LessonDto> updateLesson(@PathVariable Long id,
+    public ResponseEntity<LessonDto> updateLesson(@PathVariable("id") Long id,
                                                    @Valid @RequestBody LessonCreateRequest req) {
         return ResponseEntity.ok(lessonService.update(id, req));
     }
 
     @DeleteMapping("/lessons/{id}")
-    public ResponseEntity<Void> deleteLesson(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteLesson(@PathVariable("id") Long id) {
         lessonService.delete(id);
         return ResponseEntity.noContent().build();
     }
@@ -59,13 +59,13 @@ public class AdminController {
     }
 
     @PutMapping("/tasks/{id}")
-    public ResponseEntity<TaskDto> updateTask(@PathVariable Long id,
+    public ResponseEntity<TaskDto> updateTask(@PathVariable("id") Long id,
                                                @Valid @RequestBody TaskCreateRequest req) {
         return ResponseEntity.ok(taskService.update(id, req));
     }
 
     @DeleteMapping("/tasks/{id}")
-    public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteTask(@PathVariable("id") Long id) {
         taskService.delete(id);
         return ResponseEntity.noContent().build();
     }
@@ -82,12 +82,12 @@ public class AdminController {
     }
 
     @GetMapping("/students/{id}")
-    public ResponseEntity<StudentDetailDto> getStudentDetail(@PathVariable Long id) {
+    public ResponseEntity<StudentDetailDto> getStudentDetail(@PathVariable("id") Long id) {
         return ResponseEntity.ok(studentProgressService.getDetail(id));
     }
 
     @GetMapping(value = "/students/{id}/export-pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-    public ResponseEntity<byte[]> exportStudentPdf(@PathVariable Long id) {
+    public ResponseEntity<byte[]> exportStudentPdf(@PathVariable("id") Long id) {
         byte[] pdf = pdfExportService.exportStudentReport(id);
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"codequest-progress.pdf\"")
@@ -101,13 +101,13 @@ public class AdminController {
     }
 
     @PutMapping("/articles/{id}")
-    public ResponseEntity<ArticleDto> updateArticle(@PathVariable Long id,
+    public ResponseEntity<ArticleDto> updateArticle(@PathVariable("id") Long id,
                                                     @Valid @RequestBody ArticleCreateRequest req) {
         return ResponseEntity.ok(articleService.update(id, req));
     }
 
     @DeleteMapping("/articles/{id}")
-    public ResponseEntity<Void> deleteArticle(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteArticle(@PathVariable("id") Long id) {
         articleService.delete(id);
         return ResponseEntity.noContent().build();
     }
