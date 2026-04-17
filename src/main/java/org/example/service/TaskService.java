@@ -2,15 +2,18 @@ package org.example.service;
 
 import org.example.dto.TaskCreateRequest;
 import org.example.dto.TaskDto;
+import org.example.dto.TaskEditDto;
 import org.example.dto.TestCaseDto;
 import org.example.entity.*;
 import org.example.repository.*;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional(readOnly = true)
@@ -35,10 +38,35 @@ public class TaskService {
     public Page<TaskDto> findPage(String search, String username, int page, int size) {
         Long userId = resolveUserId(username);
         var p = PageRequest.of(page, size);
-        Page<Task> tasks = (search != null && !search.isBlank())
-                ? taskRepo.findByTitleContainingIgnoreCaseOrderByIdAsc(search.trim(), p)
-                : taskRepo.findAllByOrderByIdAsc(p);
-        return tasks.map(t -> toDto(t, userId));
+        if (search != null && !search.isBlank()) {
+            String t = search.trim();
+            Optional<Long> byId = parseNumericIdQuery(t);
+            if (byId.isPresent()) {
+                if (page > 0) {
+                    return Page.<TaskDto>empty(p);
+                }
+                Optional<Task> task = taskRepo.findById(byId.get());
+                if (task.isEmpty()) {
+                    return Page.<TaskDto>empty(p);
+                }
+                return new PageImpl<>(List.of(toDto(task.get(), userId)), p, 1);
+            }
+            return taskRepo.findByTitleContainingIgnoreCaseOrderByIdAsc(t, p)
+                    .map(task -> toDto(task, userId));
+        }
+        return taskRepo.findAllByOrderByIdAsc(p).map(task -> toDto(task, userId));
+    }
+
+    /** Строка из одних цифр или `#12` — точный поиск по id задачи. */
+    private static Optional<Long> parseNumericIdQuery(String trimmed) {
+        if (!trimmed.matches("#?\\d+")) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Long.parseLong(trimmed.replaceFirst("^#", "")));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     public List<TaskDto> findByLesson(Long lessonId, String username) {
@@ -54,7 +82,28 @@ public class TaskService {
         return toDto(task, userId);
     }
 
-    @Transactional
+    public TaskEditDto findForEdit(Long id) {
+        Task t = taskRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+        List<TestCaseDto> examples = testCaseRepo.findByTaskIdOrderByOrderIndexAsc(id).stream()
+                .map(tc -> new TestCaseDto(tc.getId(), tc.getInput(), tc.getExpectedOutput(), tc.isSample()))
+                .toList();
+        return new TaskEditDto(
+                t.getId(),
+                t.getLesson().getId(),
+                t.getTitle(),
+                t.getDescription(),
+                t.getDifficulty().name(),
+                t.getXpReward(),
+                t.getTemplateCode(),
+                t.getExpectedOutput(),
+                t.getHints(),
+                t.getOrderIndex(),
+                examples
+        );
+    }
+
+    @Transactional(readOnly = false)
     public TaskDto create(TaskCreateRequest req) {
         Lesson lesson = lessonRepo.findById(req.lessonId())
                 .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
@@ -71,26 +120,20 @@ public class TaskService {
         task.setOrderIndex(req.orderIndex());
         taskRepo.save(task);
 
-        if (req.testCases() != null) {
-            int idx = 0;
-            for (TaskCreateRequest.TestCaseInput tci : req.testCases()) {
-                TestCase tc = new TestCase();
-                tc.setTask(task);
-                tc.setInput(tci.input());
-                tc.setExpectedOutput(tci.expectedOutput());
-                tc.setSample(tci.sample());
-                tc.setOrderIndex(idx++);
-                testCaseRepo.save(tc);
-            }
-        }
+        saveTestCases(task, req.testCases());
 
         return toDto(task, null);
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public TaskDto update(Long id, TaskCreateRequest req) {
         Task task = taskRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+        if (req.lessonId() != null) {
+            Lesson lesson = lessonRepo.findById(req.lessonId())
+                    .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+            task.setLesson(lesson);
+        }
         task.setTitle(req.title());
         task.setDescription(req.description());
         if (req.difficulty() != null) task.setDifficulty(Difficulty.valueOf(req.difficulty()));
@@ -99,12 +142,36 @@ public class TaskService {
         task.setExpectedOutput(req.expectedOutput());
         task.setHints(req.hints());
         task.setOrderIndex(req.orderIndex());
-        return toDto(taskRepo.save(task), null);
+        task = taskRepo.save(task);
+
+        testCaseRepo.deleteByTaskId(id);
+        saveTestCases(task, req.testCases());
+
+        return toDto(task, null);
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public void delete(Long id) {
         taskRepo.deleteById(id);
+    }
+
+    private void saveTestCases(Task task, List<TaskCreateRequest.TestCaseInput> cases) {
+        if (cases == null || cases.isEmpty()) {
+            return;
+        }
+        int idx = 0;
+        for (TaskCreateRequest.TestCaseInput tci : cases) {
+            if (tci.expectedOutput() == null || tci.expectedOutput().isBlank()) {
+                continue;
+            }
+            TestCase tc = new TestCase();
+            tc.setTask(task);
+            tc.setInput(tci.input() == null ? "" : tci.input());
+            tc.setExpectedOutput(tci.expectedOutput());
+            tc.setSample(tci.sample());
+            tc.setOrderIndex(idx++);
+            testCaseRepo.save(tc);
+        }
     }
 
     private Long resolveUserId(String username) {

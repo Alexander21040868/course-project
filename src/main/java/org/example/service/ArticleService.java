@@ -13,9 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
-@Transactional(readOnly = true)
 public class ArticleService {
 
     private static final Logger log = LoggerFactory.getLogger(ArticleService.class);
@@ -28,22 +28,44 @@ public class ArticleService {
         this.userRepo = userRepo;
     }
 
+    @Transactional(readOnly = true)
     public List<ArticleSummaryDto> search(String q) {
-        if (q == null || q.isBlank())
+        if (q == null || q.isBlank()) {
             return articleRepo.findAllByOrderByOrderIndexAsc().stream()
                     .map(a -> new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(), a.getOrderIndex()))
                     .toList();
-        return articleRepo.findByTitleContainingIgnoreCaseOrderByOrderIndexAsc(q.trim()).stream()
+        }
+        String t = q.trim();
+        Optional<Long> byId = parseNumericIdQuery(t);
+        if (byId.isPresent()) {
+            return articleRepo.findById(byId.get())
+                    .map(a -> List.of(new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(), a.getOrderIndex())))
+                    .orElseGet(List::of);
+        }
+        return articleRepo.findByTitleContainingIgnoreCaseOrderByOrderIndexAsc(t).stream()
                 .map(a -> new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(), a.getOrderIndex()))
                 .toList();
     }
 
+    /** Строка из одних цифр или `#12` — точный поиск по id статьи. */
+    private static Optional<Long> parseNumericIdQuery(String trimmed) {
+        if (!trimmed.matches("#?\\d+")) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Long.parseLong(trimmed.replaceFirst("^#", "")));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+
+    @Transactional(readOnly = true)
     public ArticleDto findById(Long id) {
         return articleRepo.findById(id).map(this::toDto)
                 .orElseThrow(() -> new IllegalArgumentException("Статья не найдена"));
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public ArticleDto create(ArticleCreateRequest req, String authorUsername) {
         User author = userRepo.findByUsername(authorUsername).orElse(null);
         Article a = new Article();
@@ -57,7 +79,7 @@ public class ArticleService {
         return toDto(saved);
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public ArticleDto update(Long id, ArticleCreateRequest req) {
         Article a = articleRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Статья не найдена"));
@@ -69,7 +91,7 @@ public class ArticleService {
         return toDto(articleRepo.save(a));
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public void delete(Long id) {
         log.info("Статья удалена: id={}", id);
         articleRepo.deleteById(id);

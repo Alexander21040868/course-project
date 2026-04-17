@@ -89,7 +89,7 @@
                 </div>
                 <div class="task-desc" id="taskDesc"></div>
                 <div id="sampleTestsBlock" style="display:none">
-                    <h4 style="font-size:12px;margin-bottom:8px;color:var(--cyan)">📋 Примеры тестов</h4>
+                    <h4 style="font-size:12px;margin-bottom:8px;color:var(--cyan)">📋 Примеры ввода и вывода</h4>
                     <div id="sampleTestsList" class="sample-tests"></div>
                 </div>
                 <details class="hint-box" id="hintBox" style="display:none">
@@ -121,7 +121,7 @@
             <!-- LIBRARY -->
             <div class="view" id="view-library">
                 <div class="search-bar">
-                    <input type="text" id="librarySearch" placeholder="Поиск по статьям..." autocomplete="off">
+                    <input type="text" id="librarySearch" placeholder="Заголовок или только id / #id — откроется справа" autocomplete="off">
                 </div>
                 <div class="library-layout">
                     <div class="library-list" id="libraryList"></div>
@@ -132,7 +132,7 @@
             <!-- CATALOG -->
             <div class="view" id="view-catalog">
                 <div class="search-bar">
-                    <input type="text" id="catalogSearch" placeholder="Поиск по названию задачи..." autocomplete="off">
+                    <input type="text" id="catalogSearch" placeholder="Название или id / #id задачи…" autocomplete="off">
                 </div>
                 <div class="task-list" id="catalogList"></div>
                 <div class="pager-row" id="catalogPager" style="display:none"></div>
@@ -161,37 +161,73 @@
                     <div class="admin-section">
                         <h3>📚 Статья в библиотеку</h3>
                         <form class="admin-form" id="createArticleForm">
+                            <p class="admin-edit-hint">Новая статья — поля и «Опубликовать». Правка: id и «Подставить в форму» (только эта форма). Читать статью по id — во вкладке «Библиотека», введите id в поиск сверху. «Новая статья» — сброс.</p>
+                            <div class="admin-edit-bar">
+                                <label>Id статьи</label>
+                                <input type="number" id="loadArticleId" min="1" placeholder="из библиотеки">
+                                <button type="button" class="btn-admin btn-admin-ghost" id="loadArticleBtn">Подставить в форму</button>
+                                <button type="button" class="btn-admin btn-admin-ghost" id="clearArticleEditBtn">Новая статья</button>
+                            </div>
                             <div><label>Название</label><input type="text" name="title" required placeholder="Заголовок"></div>
                             <div><label>Категория</label><input type="text" name="category" placeholder="Справочник"></div>
-                            <div><label>Содержание (Markdown)</label><textarea name="content" required rows="6" placeholder="## Заголовок..."></textarea></div>
+                            <div class="admin-article-split">
+                                <div><label>Содержание (Markdown)</label><textarea id="articleContent" name="content" required rows="10" placeholder="Начните ввод слева — превью справа обновится автоматически"></textarea></div>
+                                <div>
+                                    <div class="admin-preview-head"><label>Превью</label><span class="admin-preview-note">только просмотр · набор текста слева</span></div>
+                                    <div id="articleMdPreview" class="article-md-preview md-content" tabindex="-1" title="Редактирование только в поле Markdown слева"></div>
+                                </div>
+                            </div>
                             <div><label>Порядок</label><input type="number" name="orderIndex" value="0"></div>
-                            <button type="submit" class="btn-admin">Опубликовать статью</button>
+                            <button type="submit" class="btn-admin" id="articleFormSubmitBtn">Опубликовать</button>
                         </form>
+                        <input type="hidden" id="editArticleId" value="" autocomplete="off">
                     </div>
                     <div class="admin-section">
                         <h3>📖 Создать урок</h3>
                         <form class="admin-form" id="createLessonForm">
+                            <p class="admin-edit-hint">Правка урока: id и «Подставить в форму», затем «Сохранить». «Новый урок» — сброс.</p>
+                            <div class="admin-edit-bar">
+                                <label>Id урока</label>
+                                <input type="number" id="loadLessonId" min="1" placeholder="существующий">
+                                <button type="button" class="btn-admin btn-admin-ghost" id="loadLessonBtn">Подставить в форму</button>
+                                <button type="button" class="btn-admin btn-admin-ghost" id="clearLessonEditBtn">Новый урок</button>
+                            </div>
                             <div><label>Название</label><input type="text" name="title" required placeholder="Введение в C"></div>
                             <div><label>Описание</label><input type="text" name="description" placeholder="Краткое описание"></div>
                             <div><label>Содержание (HTML)</label><textarea name="content" placeholder="<p>Теория...</p>"></textarea></div>
                             <div><label>Порядковый номер</label><input type="number" name="orderIndex" value="0"></div>
-                            <button type="submit" class="btn-admin">Создать урок</button>
+                            <button type="submit" class="btn-admin" id="lessonFormSubmitBtn">Создать урок</button>
                         </form>
+                        <input type="hidden" id="editLessonId" value="" autocomplete="off">
                     </div>
                     <div class="admin-section">
                         <h3>⚔ Создать задачу</h3>
                         <form class="admin-form" id="createTaskForm">
+                            <p class="admin-edit-hint">Правка задачи: id и «Подставить в форму». «Новая задача» — сброс.</p>
+                            <div class="admin-edit-bar">
+                                <label>Id задачи</label>
+                                <input type="number" id="loadTaskId" min="1" placeholder="существующая">
+                                <button type="button" class="btn-admin btn-admin-ghost" id="loadTaskBtn">Подставить в форму</button>
+                                <button type="button" class="btn-admin btn-admin-ghost" id="clearTaskEditBtn">Новая задача</button>
+                            </div>
                             <div><label>ID Урока</label><input type="number" name="lessonId" required placeholder="1"></div>
                             <div><label>Название</label><input type="text" name="title" required placeholder="Hello World"></div>
                             <div><label>Описание</label><textarea name="description" placeholder="Описание..."></textarea></div>
                             <div><label>Сложность</label><select name="difficulty"><option value="EASY">Лёгкая</option><option value="MEDIUM">Средняя</option><option value="HARD">Сложная</option></select></div>
                             <div><label>Награда XP</label><input type="number" name="xpReward" value="10"></div>
                             <div><label>Шаблон кода</label><textarea name="templateCode" placeholder="#include <stdio.h>"></textarea></div>
-                            <div><label>Ожидаемый вывод</label><input type="text" name="expectedOutput" placeholder="Hello, World!"></div>
+                            <div class="admin-tc-block">
+                                <label>Примеры ввода и ожидаемого вывода</label>
+                                <p class="admin-tc-hint">Для условия задачи: что подаётся на вход программе и что должно получиться на выходе. Строка сохраняется, если заполнен блок «Выход». Эти же пары участвуют в автопроверке решения.</p>
+                                <div id="taskExamples"></div>
+                                <button type="button" class="btn-admin btn-tc-add" id="addExampleBtn">+ пример</button>
+                            </div>
+                            <div><label>Эталонный вывод без примеров выше</label><textarea name="expectedOutput" rows="4" placeholder="Если примеров нет — сравнение только с этим текстом (можно несколько строк)"></textarea></div>
                             <div><label>Подсказка</label><input type="text" name="hints" placeholder="Используйте printf()"></div>
                             <div><label>Порядковый номер</label><input type="number" name="orderIndex" value="0"></div>
-                            <button type="submit" class="btn-admin">Создать задачу</button>
+                            <button type="submit" class="btn-admin" id="taskFormSubmitBtn">Создать задачу</button>
                         </form>
+                        <input type="hidden" id="editTaskId" value="" autocomplete="off">
                     </div>
                 </div>
                 <div class="admin-panel" id="atab-students"><div id="studentsTable"></div></div>

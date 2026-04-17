@@ -44,7 +44,7 @@ public class LessonService {
                 .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public LessonDto create(LessonCreateRequest req, String authorUsername) {
         User author = userRepo.findByUsername(authorUsername)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
@@ -62,7 +62,7 @@ public class LessonService {
         return toDto(saved);
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public LessonDto update(Long id, LessonCreateRequest req) {
         Lesson lesson = lessonRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
@@ -75,7 +75,7 @@ public class LessonService {
         return toDto(saved);
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public void delete(Long id) {
         log.info("Урок удалён: id={}", id);
         lessonRepo.deleteById(id);

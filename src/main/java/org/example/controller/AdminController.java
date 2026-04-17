@@ -3,10 +3,7 @@ package org.example.controller;
 import jakarta.validation.Valid;
 import org.example.dto.*;
 import org.example.service.*;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -14,7 +11,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin")
-@Transactional(readOnly = true)
 public class AdminController {
 
     private final LessonService lessonService;
@@ -22,17 +18,15 @@ public class AdminController {
     private final ChallengeService challengeService;
     private final StudentProgressService studentProgressService;
     private final ArticleService articleService;
-    private final PdfExportService pdfExportService;
 
     public AdminController(LessonService lessonService, TaskService taskService,
                            ChallengeService challengeService, StudentProgressService studentProgressService,
-                           ArticleService articleService, PdfExportService pdfExportService) {
+                           ArticleService articleService) {
         this.lessonService = lessonService;
         this.taskService = taskService;
         this.challengeService = challengeService;
         this.studentProgressService = studentProgressService;
         this.articleService = articleService;
-        this.pdfExportService = pdfExportService;
     }
 
     @PostMapping("/lessons")
@@ -56,6 +50,11 @@ public class AdminController {
     @PostMapping("/tasks")
     public ResponseEntity<TaskDto> createTask(@Valid @RequestBody TaskCreateRequest req) {
         return ResponseEntity.ok(taskService.create(req));
+    }
+
+    @GetMapping("/tasks/{id}")
+    public ResponseEntity<TaskEditDto> getTaskForEdit(@PathVariable("id") Long id) {
+        return ResponseEntity.ok(taskService.findForEdit(id));
     }
 
     @PutMapping("/tasks/{id}")
@@ -84,14 +83,6 @@ public class AdminController {
     @GetMapping("/students/{id}")
     public ResponseEntity<StudentDetailDto> getStudentDetail(@PathVariable("id") Long id) {
         return ResponseEntity.ok(studentProgressService.getDetail(id));
-    }
-
-    @GetMapping(value = "/students/{id}/export-pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-    public ResponseEntity<byte[]> exportStudentPdf(@PathVariable("id") Long id) {
-        byte[] pdf = pdfExportService.exportStudentReport(id);
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"codequest-progress.pdf\"")
-                .body(pdf);
     }
 
     @PostMapping("/articles")

@@ -74,22 +74,24 @@ const API = {
         return h;
     },
 
+    /** Редирект на вход и исключение, чтобы await API.* не получал undefined. */
+    _failSession(msg) {
+        localStorage.clear();
+        window.location.href = '/index.html';
+        throw new Error(msg);
+    },
+
     _handleAuthError(err) {
         if (err && err.error && err.error.includes('не найден')) {
-            localStorage.clear();
-            window.location.href = '/index.html';
-            return true;
+            this._failSession('Пользователь не найден. Войдите снова.');
         }
-        return false;
     },
 
     async get(path) {
         const res = await fetch(this.base + path, { headers: this.headers() });
         const text = await res.text();
         if (res.status === 401 || res.status === 403) {
-            localStorage.clear();
-            window.location.href = '/index.html';
-            return;
+            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
         }
         if (res.status === 404) {
             let err = {};
@@ -107,7 +109,7 @@ const API = {
             } catch {
                 err = {};
             }
-            if (this._handleAuthError(err)) return;
+            this._handleAuthError(err);
             throw new Error(err.error || 'Ошибка запроса');
         }
         return cqParseJsonBody(text);
@@ -121,9 +123,7 @@ const API = {
         });
         const text = await res.text();
         if (res.status === 401 || res.status === 403) {
-            localStorage.clear();
-            window.location.href = '/index.html';
-            return;
+            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
         }
         if (!res.ok) {
             let err = {};
@@ -132,28 +132,10 @@ const API = {
             } catch {
                 err = {};
             }
-            if (this._handleAuthError(err)) return;
+            this._handleAuthError(err);
             throw new Error(err.error || 'Ошибка запроса');
         }
         return cqParseJsonBody(text);
-    },
-
-    async delete(path) {
-        const res = await fetch(this.base + path, {
-            method: 'DELETE',
-            headers: this.headers()
-        });
-        const text = await res.text();
-        if (!res.ok) {
-            let err = {};
-            try {
-                err = text ? cqParseJsonBody(text) : {};
-            } catch {
-                err = {};
-            }
-            if (this._handleAuthError(err)) return;
-            throw new Error(err.error || 'Ошибка удаления');
-        }
     },
 
     async put(path, body) {
@@ -164,9 +146,7 @@ const API = {
         });
         const text = await res.text();
         if (res.status === 401 || res.status === 403) {
-            localStorage.clear();
-            window.location.href = '/index.html';
-            return;
+            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
         }
         if (!res.ok) {
             let err = {};
@@ -175,10 +155,31 @@ const API = {
             } catch {
                 err = {};
             }
-            if (this._handleAuthError(err)) return;
+            this._handleAuthError(err);
             throw new Error(err.error || 'Ошибка запроса');
         }
-        return cqParseJsonBody(text);
+        return text.trim() ? cqParseJsonBody(text) : null;
+    },
+
+    async delete(path) {
+        const res = await fetch(this.base + path, {
+            method: 'DELETE',
+            headers: this.headers()
+        });
+        const text = await res.text();
+        if (res.status === 401 || res.status === 403) {
+            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
+        }
+        if (!res.ok) {
+            let err = {};
+            try {
+                err = text ? cqParseJsonBody(text) : {};
+            } catch {
+                err = {};
+            }
+            this._handleAuthError(err);
+            throw new Error(err.error || 'Ошибка удаления');
+        }
     },
 
     /** Бинарный ответ (PDF и т.п.) */
@@ -188,9 +189,7 @@ const API = {
         if (t) h['Authorization'] = 'Bearer ' + t;
         const res = await fetch(this.base + path, { headers: h });
         if (res.status === 401 || res.status === 403) {
-            localStorage.clear();
-            window.location.href = '/index.html';
-            return null;
+            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
         }
         if (!res.ok) throw new Error('Ошибка загрузки файла');
         return res.blob();

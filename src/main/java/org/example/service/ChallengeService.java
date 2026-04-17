@@ -53,7 +53,7 @@ public class ChallengeService {
                 .map(c -> toDto(c, userId, now)).toList();
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public ChallengeDto create(ChallengeCreateRequest req, String username) {
         User author = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
@@ -73,7 +73,7 @@ public class ChallengeService {
         return toDto(ch, author.getId(), LocalDateTime.now());
     }
 
-    @Transactional
+    @Transactional(readOnly = false)
     public void join(Long challengeId, String username) {
         User user = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));

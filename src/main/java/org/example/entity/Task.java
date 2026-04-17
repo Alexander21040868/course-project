@@ -31,7 +31,7 @@ public class Task {
     @Column(name = "template_code")
     private String templateCode;
 
-    @Column(name = "expected_output", length = 2000)
+    @Column(name = "expected_output", length = 10000)
     private String expectedOutput;
 
     @Column(length = 2000)

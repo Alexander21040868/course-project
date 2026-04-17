@@ -1,4 +1,4 @@
-/** Звуки через Web Audio (TODO 3.4): без mp3, работает после первого клика пользователя. */
+/** Звуки через Web Audio; первый клик по странице активирует AudioContext. */
 (function () {
     const KEY = 'cq_mute';
     window.CQSound = {
@@ -206,26 +206,46 @@ document.addEventListener('DOMContentLoaded', () => {
         libTimer = setTimeout(() => loadLibrary($('librarySearch').value), 300);
     });
 
+    /** `#12` или `12` в запросе — поиск по id; убираем `#` до encode, чтобы не ломать URL. */
+    function normalizeIdSearchQuery(s) {
+        const t = (s || '').trim();
+        return t.replace(/^#(?=\d+$)/, '');
+    }
+
     async function loadLibrary(q) {
         const listEl = $('libraryList');
         const artEl = $('libraryArticle');
         listEl.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
-            const path = '/articles' + (q ? '?q=' + encodeURIComponent(q) : '');
+            const qNorm = normalizeIdSearchQuery(q);
+            const path = '/articles' + (qNorm ? '?q=' + encodeURIComponent(qNorm) : '');
+            const looksArticleId = /^#?\d+$/.test((q || '').trim());
             const items = await API.get(path) || [];
             state.libraryArticles = items;
             if (!items.length) {
-                listEl.innerHTML = '<p class="empty-hint">Ничего не найдено</p>';
+                const hint = looksArticleId
+                    ? `Статьи с id ${qNorm} нет`
+                    : 'Ничего не найдено';
+                listEl.innerHTML = `<p class="empty-hint">${esc(hint)}</p>`;
                 return;
             }
             listEl.innerHTML = items.map(a => `
                 <button type="button" class="library-card ${state.selectedArticleId === a.id ? 'active' : ''}" data-aid="${a.id}">
-                    <div class="lc-cat">${esc(a.category)}</div>
+                    <div class="library-card-meta">
+                        <span class="lc-id" title="Номер для правки в «Управление»">#${a.id}</span>
+                        <span class="lc-cat">${esc(a.category)}</span>
+                    </div>
                     <div class="lc-title">${esc(a.title)}</div>
                 </button>`).join('');
             listEl.querySelectorAll('.library-card').forEach(btn => btn.addEventListener('click', () => openArticle(+btn.dataset.aid)));
-            if (state.selectedArticleId && items.some(x => x.id === state.selectedArticleId)) openArticle(state.selectedArticleId);
-            else { artEl.innerHTML = '<p class="empty-hint">Выберите статью слева</p>'; state.selectedArticleId = null; }
+            if (looksArticleId && items.length === 1) {
+                await openArticle(items[0].id);
+            } else if (state.selectedArticleId && items.some(x => x.id === state.selectedArticleId)) {
+                await openArticle(state.selectedArticleId);
+            } else {
+                artEl.innerHTML = '<p class="empty-hint">Выберите статью слева</p>';
+                state.selectedArticleId = null;
+            }
         } catch (e) { listEl.innerHTML = `<p class="empty-hint">${esc(e.message)}</p>`; }
     }
 
@@ -237,10 +257,23 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const a = await API.get('/articles/' + id);
             const raw = mdFromApi(a.content);
-            const html = typeof marked !== 'undefined'
-                ? marked.parse(raw, { breaks: true })
-                : esc(raw);
-            artEl.innerHTML = `<div class="md-content">${html}</div>`;
+            let html = esc(raw);
+            if (typeof marked !== 'undefined' && raw) {
+                try {
+                    const out = marked.parse(raw, { breaks: true });
+                    html = typeof out?.then === 'function' ? await out : String(out);
+                } catch {
+                    html = `<p>${esc(raw)}</p>`;
+                }
+            } else if (raw) {
+                html = `<p>${esc(raw)}</p>`;
+            }
+            artEl.innerHTML = `
+                <header class="library-article-bar">
+                    <span class="lc-id-badge" title="Этот номер указывайте в «Управление» для правки">#${a.id}</span>
+                    <h2 class="library-article-h">${esc(a.title)}</h2>
+                </header>
+                <div class="md-content">${html}</div>`;
         } catch (e) { artEl.innerHTML = `<p class="empty-hint">${esc(e.message)}</p>`; }
     }
 
@@ -293,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { el.innerHTML = `<div class="empty-state"><p>Ошибка: ${esc(e.message)}</p></div>`; }
     }
 
-    // ── Catalog (пул задач, пагинация TODO 5.1) ──
+    // ── Catalog (пул задач, пагинация) ──
     async function loadCatalog(search, page) {
         const pg = page ?? state.catalogPage;
         state.catalogPage = pg;
@@ -302,12 +335,17 @@ document.addEventListener('DOMContentLoaded', () => {
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
             const q = new URLSearchParams({ page: String(pg), size: '12' });
-            if (search) q.set('search', search);
+            const searchTrim = (search || '').trim();
+            if (searchTrim) q.set('search', normalizeIdSearchQuery(searchTrim));
             const data = await API.get('/tasks?' + q.toString());
             const tasks = data.content ?? data;
             const totalPages = data.totalPages ?? 1;
+            const looksTaskId = /^#?\d+$/.test(searchTrim);
             if (!tasks.length) {
-                el.innerHTML = '<div class="empty-state"><p>Задачи не найдены</p></div>';
+                const hint = looksTaskId
+                    ? `Нет задачи с id ${normalizeIdSearchQuery(searchTrim)}`
+                    : 'Задачи не найдены';
+                el.innerHTML = `<div class="empty-state"><p>${esc(hint)}</p></div>`;
                 pagerEl.style.display = 'none';
                 return;
             }
@@ -381,7 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { $('dailyTaskCard').style.display = 'none'; }
     }
 
-    // ── Lessons (пагинация TODO 5.1) ──
+    // ── Lessons (пагинация) ──
     async function loadLessons(page) {
         if (page !== undefined) state.lessonPage = page;
         const pg = state.lessonPage;
@@ -426,7 +464,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const lesson = await API.get('/lessons/' + id);
             $('lessonTitle').textContent = lesson.title;
             const raw = lesson.content || '';
-            $('lessonContent').innerHTML = raw.startsWith('<') ? raw : (typeof marked !== 'undefined' ? marked.parse(raw) : raw);
+            let lessonHtml = raw;
+            if (raw && !raw.trimStart().startsWith('<')) {
+                if (typeof marked !== 'undefined') {
+                    try {
+                        const out = marked.parse(raw, { breaks: true });
+                        lessonHtml = typeof out?.then === 'function' ? await out : String(out);
+                    } catch {
+                        lessonHtml = `<p>${esc(raw)}</p>`;
+                    }
+                } else {
+                    lessonHtml = `<p>${esc(raw)}</p>`;
+                }
+            }
+            $('lessonContent').innerHTML = lessonHtml;
             const tasks = await API.get('/tasks/lesson/' + id);
             if (!tasks.length) { $('taskList').innerHTML = '<div class="empty-state"><p>Задачи не созданы.</p></div>'; return; }
             $('taskList').innerHTML = tasks.map(t => `
@@ -608,37 +659,235 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Admin ──
+    /** У `<form>` свойство `.title` — это подсказка элемента, а не поле `name="title"`. */
+    function formField(form, name) {
+        const el = form && form.elements.namedItem(name);
+        return el && 'value' in el ? el : null;
+    }
+    function setFormField(form, name, val) {
+        const el = formField(form, name);
+        if (el) el.value = val == null ? '' : String(val);
+    }
+
     async function loadStudents() {
         const el = $('studentsTable');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
             const students = await API.get('/admin/students');
             if (!students.length) { el.innerHTML = '<p style="color:var(--text-dim)">Нет студентов</p>'; return; }
-            el.innerHTML = '<table class="results-table"><tr><th>Герой</th><th>XP</th><th>LVL</th><th>Решено</th><th>Прогресс</th><th>Отчёт</th></tr>' +
-                students.map(s => `<tr><td>${esc(s.username)}</td><td>${s.xp}</td><td>${s.level}</td><td>${s.totalSolved}/${s.totalTasks}</td><td><div class="mini-bar"><div class="mini-fill" style="width:${s.solvedPercent}%"></div></div></td><td><button type="button" class="btn-pdf" data-uid="${s.userId}">PDF</button></td></tr>`).join('') + '</table>';
-            el.querySelectorAll('.btn-pdf').forEach(b => b.addEventListener('click', () => downloadStudentPdf(+b.dataset.uid)));
+            el.innerHTML = '<table class="results-table"><tr><th>Герой</th><th>XP</th><th>LVL</th><th>Решено</th><th>Прогресс</th></tr>' +
+                students.map(s => `<tr><td>${esc(s.username)}</td><td>${s.xp}</td><td>${s.level}</td><td>${s.totalSolved}/${s.totalTasks}</td><td><div class="mini-bar"><div class="mini-fill" style="width:${s.solvedPercent}%"></div></div></td></tr>`).join('') + '</table>';
         } catch (e) { el.innerHTML = '<p>Ошибка</p>'; }
     }
 
-    async function downloadStudentPdf(userId) {
-        try {
-            const blob = await API.getBlob('/admin/students/' + userId + '/export-pdf');
-            if (!blob) return;
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'codequest-progress.pdf';
-            a.click();
-            URL.revokeObjectURL(a.href);
-        } catch (e) { alert(e.message); }
+    const taskExampleRowHtml = () => `
+        <div class="admin-example-row">
+            <div><label>Пример ввода</label><textarea data-tc="in" rows="2" placeholder="Что попадает в stdin (можно пусто)"></textarea></div>
+            <div><label>Ожидаемый вывод для этого примера</label><textarea data-tc="out" rows="3" placeholder="Что должно быть в stdout; без этого пример не сохранится"></textarea></div>
+            <label class="admin-tc-chk"><input type="checkbox" data-tc="sample" checked> Показывать в условии задачи</label>
+            <button type="button" class="rm-tc">Удалить пример</button>
+        </div>`;
+
+    function bindExampleRow(row) {
+        row.querySelector('.rm-tc').addEventListener('click', () => {
+            const box = $('taskExamples');
+            if (box && box.children.length > 1) row.remove();
+        });
     }
 
+    function resetTaskExamples() {
+        const box = $('taskExamples');
+        if (!box) return;
+        box.innerHTML = taskExampleRowHtml();
+        bindExampleRow(box.firstElementChild);
+    }
+
+    /** Собирает пары ввода/вывода для API (поле testCases — внутреннее имя сущности). */
+    function collectTaskExamplesForApi() {
+        const box = $('taskExamples');
+        if (!box) return [];
+        return [...box.querySelectorAll('.admin-example-row')].map(row => ({
+            input: row.querySelector('[data-tc="in"]').value,
+            expectedOutput: row.querySelector('[data-tc="out"]').value,
+            sample: row.querySelector('[data-tc="sample"]').checked
+        })).filter(tc => tc.expectedOutput.trim().length > 0);
+    }
+
+    function renderTaskExamplesFromApi(examples) {
+        const box = $('taskExamples');
+        if (!box) return;
+        box.innerHTML = '';
+        const rows = examples && examples.length ? examples : [{ input: '', expectedOutput: '', sample: true }];
+        rows.forEach(ex => {
+            box.insertAdjacentHTML('beforeend', taskExampleRowHtml());
+            const row = box.lastElementChild;
+            row.querySelector('[data-tc="in"]').value = ex.input ?? '';
+            row.querySelector('[data-tc="out"]').value = ex.expectedOutput ?? '';
+            row.querySelector('[data-tc="sample"]').checked = !!ex.sample;
+            bindExampleRow(row);
+        });
+    }
+
+    function articlePreviewEmptyHtml() {
+        return '<p class="article-preview-placeholder">Сюда нельзя вводить текст: это окно только показывает, как будет выглядеть Markdown <strong>слева</strong>. Серая подсказка в поле не считается содержимым — начните печатать, и превью обновится.</p>';
+    }
+
+    function syncArticlePreview() {
+        const ta = $('articleContent');
+        const pv = $('articleMdPreview');
+        if (!ta || !pv) return;
+        const raw = mdFromApi(ta.value);
+        if (!raw.trim()) {
+            pv.innerHTML = articlePreviewEmptyHtml();
+            return;
+        }
+        const apply = (html) => { pv.innerHTML = html; };
+        try {
+            if (typeof marked !== 'undefined') {
+                const out = marked.parse(raw, { breaks: true });
+                if (out != null && typeof out.then === 'function') {
+                    apply('<p class="article-preview-placeholder">…</p>');
+                    out.then((h) => apply(String(h))).catch(() => apply(`<p>${esc(raw)}</p>`));
+                    return;
+                }
+                apply(String(out));
+            } else {
+                apply(`<p>${esc(raw)}</p>`);
+            }
+        } catch {
+            apply(`<p>${esc(raw)}</p>`);
+        }
+    }
+
+    $('loadLessonBtn')?.addEventListener('click', async () => {
+        const id = +$('loadLessonId').value;
+        if (!id) { alert('Введите id урока (число).'); return; }
+        try {
+            const d = await API.get('/lessons/' + id);
+            const f = $('createLessonForm');
+            setFormField(f, 'title', d.title);
+            setFormField(f, 'description', d.description);
+            setFormField(f, 'content', d.content);
+            setFormField(f, 'orderIndex', d.orderIndex ?? 0);
+            $('editLessonId').value = String(d.id);
+            $('lessonFormSubmitBtn').textContent = 'Сохранить урок';
+        } catch (err) { alert(err.message); }
+    });
+    $('clearLessonEditBtn')?.addEventListener('click', () => {
+        $('createLessonForm').reset();
+        $('editLessonId').value = '';
+        $('loadLessonId').value = '';
+        $('lessonFormSubmitBtn').textContent = 'Создать урок';
+    });
+
+    $('loadTaskBtn')?.addEventListener('click', async () => {
+        const id = +$('loadTaskId').value;
+        if (!id) { alert('Введите id задачи (число).'); return; }
+        try {
+            const d = await API.get('/admin/tasks/' + id);
+            const f = $('createTaskForm');
+            setFormField(f, 'lessonId', d.lessonId);
+            setFormField(f, 'title', d.title);
+            setFormField(f, 'description', d.description);
+            setFormField(f, 'difficulty', d.difficulty);
+            setFormField(f, 'xpReward', d.xpReward);
+            setFormField(f, 'templateCode', d.templateCode);
+            setFormField(f, 'expectedOutput', d.expectedOutput);
+            setFormField(f, 'hints', d.hints);
+            setFormField(f, 'orderIndex', d.orderIndex ?? 0);
+            renderTaskExamplesFromApi(d.examples);
+            $('editTaskId').value = String(d.id);
+            $('taskFormSubmitBtn').textContent = 'Сохранить задачу';
+        } catch (err) { alert(err.message); }
+    });
+    $('clearTaskEditBtn')?.addEventListener('click', () => {
+        $('createTaskForm').reset();
+        $('editTaskId').value = '';
+        $('loadTaskId').value = '';
+        resetTaskExamples();
+        $('taskFormSubmitBtn').textContent = 'Создать задачу';
+    });
+
+    $('loadArticleBtn')?.addEventListener('click', async () => {
+        const id = +$('loadArticleId').value;
+        if (!id) { alert('Введите id статьи (число).'); return; }
+        try {
+            const d = await API.get('/articles/' + id);
+            const f = $('createArticleForm');
+            setFormField(f, 'title', d.title);
+            setFormField(f, 'category', d.category);
+            $('articleContent').value = d.content || '';
+            setFormField(f, 'orderIndex', d.orderIndex ?? 0);
+            $('editArticleId').value = String(d.id);
+            $('articleFormSubmitBtn').textContent = 'Сохранить статью';
+            syncArticlePreview();
+        } catch (err) { alert(err.message); }
+    });
+    $('clearArticleEditBtn')?.addEventListener('click', () => {
+        $('createArticleForm').reset();
+        $('editArticleId').value = '';
+        $('loadArticleId').value = '';
+        $('articleFormSubmitBtn').textContent = 'Опубликовать';
+        syncArticlePreview();
+    });
+    $('articleContent')?.addEventListener('input', () => syncArticlePreview());
+
     $('createLessonForm').addEventListener('submit', async e => {
-        e.preventDefault(); const fd = new FormData(e.target);
-        try { await API.post('/admin/lessons', { title: fd.get('title'), description: fd.get('description'), content: fd.get('content'), orderIndex: +fd.get('orderIndex') }); e.target.reset(); showToast('📖','Урок создан',''); } catch(err) { alert(err.message); }
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const body = { title: fd.get('title'), description: fd.get('description'), content: fd.get('content'), orderIndex: +fd.get('orderIndex') };
+        const lid = $('editLessonId').value;
+        try {
+            const saved = lid
+                ? await API.put('/admin/lessons/' + lid, body)
+                : await API.post('/admin/lessons', body);
+            if (lid) {
+                if (saved && saved.id != null) $('editLessonId').value = String(saved.id);
+                $('lessonFormSubmitBtn').textContent = 'Сохранить урок';
+                if (saved?.id != null) $('loadLessonId').value = String(saved.id);
+            } else {
+                e.target.reset();
+                $('editLessonId').value = '';
+                $('lessonFormSubmitBtn').textContent = 'Создать урок';
+                if (saved?.id != null) $('loadLessonId').value = String(saved.id);
+            }
+            showToast('📖', lid ? 'Урок сохранён' : 'Урок создан', '');
+        } catch (err) { alert(err.message); }
     });
     $('createTaskForm').addEventListener('submit', async e => {
-        e.preventDefault(); const fd = new FormData(e.target);
-        try { await API.post('/admin/tasks', { lessonId: +fd.get('lessonId'), title: fd.get('title'), description: fd.get('description'), difficulty: fd.get('difficulty'), xpReward: +fd.get('xpReward'), templateCode: fd.get('templateCode'), expectedOutput: fd.get('expectedOutput'), hints: fd.get('hints'), orderIndex: +fd.get('orderIndex') }); e.target.reset(); showToast('⚔','Задача создана',''); } catch(err) { alert(err.message); }
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const testCases = collectTaskExamplesForApi();
+        const body = {
+            lessonId: +fd.get('lessonId'),
+            title: fd.get('title'),
+            description: fd.get('description'),
+            difficulty: fd.get('difficulty'),
+            xpReward: +fd.get('xpReward'),
+            templateCode: fd.get('templateCode'),
+            expectedOutput: (fd.get('expectedOutput') || '').trim(),
+            hints: fd.get('hints'),
+            orderIndex: +fd.get('orderIndex'),
+            testCases: testCases.length ? testCases : null
+        };
+        const tid = $('editTaskId').value;
+        try {
+            const saved = tid
+                ? await API.put('/admin/tasks/' + tid, body)
+                : await API.post('/admin/tasks', body);
+            if (tid) {
+                if (saved && saved.id != null) $('editTaskId').value = String(saved.id);
+                $('taskFormSubmitBtn').textContent = 'Сохранить задачу';
+                if (saved?.id != null) $('loadTaskId').value = String(saved.id);
+            } else {
+                e.target.reset();
+                $('editTaskId').value = '';
+                resetTaskExamples();
+                $('taskFormSubmitBtn').textContent = 'Создать задачу';
+                if (saved?.id != null) $('loadTaskId').value = String(saved.id);
+            }
+            showToast('⚔', tid ? 'Задача сохранена' : 'Задача создана', '');
+        } catch (err) { alert(err.message); }
     });
     $('createChallengeForm').addEventListener('submit', async e => {
         e.preventDefault(); const fd = new FormData(e.target);
@@ -649,13 +898,36 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(err) { alert(err.message); }
     });
     $('createArticleForm').addEventListener('submit', async e => {
-        e.preventDefault(); const fd = new FormData(e.target);
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const ta = $('articleContent');
+        const oiRaw = fd.get('orderIndex');
+        const oiNum = oiRaw === '' || oiRaw == null ? NaN : Number(oiRaw);
+        const body = {
+            title: (fd.get('title') || '').trim(),
+            content: (ta ? ta.value : fd.get('content')) || '',
+            category: (fd.get('category') || '').trim() || 'Справочник',
+            orderIndex: Number.isFinite(oiNum) ? oiNum : 0
+        };
+        const aid = $('editArticleId').value;
         try {
-            await API.post('/admin/articles', {
-                title: fd.get('title'), content: fd.get('content'),
-                category: fd.get('category') || 'Справочник', orderIndex: +fd.get('orderIndex')
-            });
-            e.target.reset(); showToast('📚', 'Статья опубликована', '');
+            const saved = aid
+                ? await API.put('/admin/articles/' + aid, body)
+                : await API.post('/admin/articles', body);
+            const sid = saved && saved.id != null ? saved.id : null;
+            if (aid) {
+                if (sid != null) $('editArticleId').value = String(sid);
+                $('articleFormSubmitBtn').textContent = 'Сохранить статью';
+                if (sid != null) $('loadArticleId').value = String(sid);
+            } else {
+                e.target.reset();
+                $('editArticleId').value = '';
+                $('articleFormSubmitBtn').textContent = 'Опубликовать';
+                if (sid != null) $('loadArticleId').value = String(sid);
+            }
+            syncArticlePreview();
+            showToast('📚', aid ? 'Статья сохранена' : 'Статья опубликована',
+                sid != null ? `Номер в библиотеке: ${sid}` : '');
         } catch (err) { alert(err.message); }
     });
 
@@ -702,6 +974,15 @@ document.addEventListener('DOMContentLoaded', () => {
             prevLevel = state.profile.level;
         }
     };
+
+    $('addExampleBtn')?.addEventListener('click', () => {
+        const box = $('taskExamples');
+        if (!box) return;
+        box.insertAdjacentHTML('beforeend', taskExampleRowHtml());
+        bindExampleRow(box.lastElementChild);
+    });
+    if ($('taskExamples')) resetTaskExamples();
+    syncArticlePreview();
 
     loadProfile(); loadLessons();
 });
