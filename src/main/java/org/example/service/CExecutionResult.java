@@ -1,8 +1,5 @@
 package org.example.service;
 
-/**
- * Результат компиляции и одного запуска в песочнице.
- */
 public record CExecutionResult(
         Kind kind,
         String stdout,

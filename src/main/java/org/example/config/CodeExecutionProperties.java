@@ -5,19 +5,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.code-execution")
 public class CodeExecutionProperties {
 
-    /** Если false — отправки не компилируются (удобно для тестов без Docker). */
     private boolean enabled = true;
-    /** Debian + GNU coreutils (корректный `timeout`); можно заменить на свой образ с gcc. */
     private String dockerImage = "gcc:14-bookworm";
     private String dockerPath = "docker";
-    /** Общий лимит ожидания docker-процесса (компиляция + запуск). */
     private long wallTimeoutMs = 45_000;
     private int runTimeoutSec = 5;
-
-    /**
-     * Если docker недоступен — компиляция и запуск через локальный gcc в temp (удобно для разработки).
-     * На проде с изоляцией лучше выключить.
-     */
     private boolean fallbackLocalGcc = true;
 
     public boolean isEnabled() {

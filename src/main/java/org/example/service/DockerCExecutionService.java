@@ -14,9 +14,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Компиляция и запуск C: сначала Docker (gcc-образ), при ошибке клиента Docker — локальный gcc в temp.
- */
 @Service
 public class DockerCExecutionService {
 
@@ -81,7 +78,6 @@ public class DockerCExecutionService {
         }
     }
 
-    /** true, если процесс docker завершился с кодом 0 (скрипт в контейнере отработал). */
     private boolean tryDockerRun(Path work) throws IOException, InterruptedException {
         List<String> cmd = List.of(
                 props.getDockerPath(),
@@ -122,10 +118,6 @@ public class DockerCExecutionService {
         }
     }
 
-    /**
-     * Скрипт в контейнере: cd в каталог с файлами; stdbuf снимает полную буферизацию stdout в файл;
-     * GNU timeout из bookworm.
-     */
     private static String buildRunnerScript(int runTimeoutSec) {
         return """
                 #!/bin/sh

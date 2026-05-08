@@ -25,9 +25,10 @@ public class StudentProgressService {
         this.submissionRepo = submissionRepo;
     }
 
-    public List<StudentProgressDto> listStudents() {
+    public List<StudentProgressDto> listGroup(String teacherUsername) {
+        User teacher = requireTeacher(teacherUsername);
         long totalTasks = taskRepo.count();
-        return userRepo.findByRole(Role.STUDENT).stream()
+        return userRepo.findByRoleAndTeacherIdOrderByUsernameAsc(Role.STUDENT, teacher.getId()).stream()
                 .map(u -> {
                     long solved = submissionRepo.countDistinctTaskByUserIdAndStatus(
                             u.getId(), SubmissionStatus.CORRECT);
@@ -38,9 +39,31 @@ public class StudentProgressService {
                 .toList();
     }
 
-    public StudentDetailDto getDetail(Long userId) {
+    public List<StudentSummaryDto> listAvailable(String teacherUsername, String search) {
+        User teacher = requireTeacher(teacherUsername);
+        String q = search == null ? "" : search.trim().toLowerCase();
+        return userRepo.findByRoleOrderByUsernameAsc(Role.STUDENT).stream()
+                .filter(u -> {
+                    User t = u.getTeacher();
+                    return t == null || !t.getId().equals(teacher.getId());
+                })
+                .filter(u -> q.isEmpty() || u.getUsername().toLowerCase().contains(q))
+                .map(u -> new StudentSummaryDto(
+                        u.getId(),
+                        u.getUsername(),
+                        u.getTeacher() != null ? u.getTeacher().getUsername() : null))
+                .toList();
+    }
+
+    public StudentDetailDto getDetail(Long userId, String teacherUsername) {
+        User teacher = requireTeacher(teacherUsername);
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Студент не найден"));
+        if (user.getRole() != Role.STUDENT
+                || user.getTeacher() == null
+                || !user.getTeacher().getId().equals(teacher.getId())) {
+            throw new IllegalArgumentException("Студент не из вашей группы");
+        }
 
         long totalSolved = submissionRepo.countDistinctTaskByUserIdAndStatus(
                 user.getId(), SubmissionStatus.CORRECT);
@@ -64,5 +87,41 @@ public class StudentProgressService {
         return new StudentDetailDto(
                 user.getId(), user.getUsername(), user.getXp(), user.getLevel(),
                 totalSolved, lessons);
+    }
+
+    @Transactional
+    public void assignToGroup(Long studentId, String teacherUsername) {
+        User teacher = requireTeacher(teacherUsername);
+        User student = userRepo.findById(studentId)
+                .orElseThrow(() -> new IllegalArgumentException("Студент не найден"));
+        if (student.getRole() != Role.STUDENT) {
+            throw new IllegalArgumentException("Можно добавлять только студентов");
+        }
+        if (student.getTeacher() != null && student.getTeacher().getId().equals(teacher.getId())) {
+            throw new IllegalArgumentException("Студент уже в вашей группе");
+        }
+        student.setTeacher(teacher);
+        userRepo.save(student);
+    }
+
+    @Transactional
+    public void removeFromGroup(Long studentId, String teacherUsername) {
+        User teacher = requireTeacher(teacherUsername);
+        User student = userRepo.findById(studentId)
+                .orElseThrow(() -> new IllegalArgumentException("Студент не найден"));
+        if (student.getTeacher() == null || !student.getTeacher().getId().equals(teacher.getId())) {
+            throw new IllegalArgumentException("Студент не в вашей группе");
+        }
+        student.setTeacher(null);
+        userRepo.save(student);
+    }
+
+    private User requireTeacher(String username) {
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        if (user.getRole() != Role.TEACHER) {
+            throw new IllegalArgumentException("Доступно только преподавателям");
+        }
+        return user;
     }
 }

@@ -13,9 +13,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 
-/**
- * Подсказки без внешнего AI: эвристики по тексту кода и условию задачи.
- */
 @Service
 @Transactional(readOnly = true)
 public class CodeHintService {
@@ -27,7 +24,6 @@ public class CodeHintService {
         this(taskRepo::findById);
     }
 
-    /** Для тестов без Mockito/Spring Data (обход ограничений Byte Buddy на новых JDK). */
     CodeHintService(Function<Long, Optional<Task>> findTaskById) {
         this.findTaskById = findTaskById;
     }

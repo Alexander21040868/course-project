@@ -1,7 +1,3 @@
-/**
- * Иногда в теле ответа после основного JSON попадает лишний текст (два объекта подряд, хвост от прокси/расширения).
- * Тогда JSON.parse падает с "Unexpected non-whitespace character after JSON".
- */
 function cqExtractFirstJsonValue(text) {
     const s = String(text).trimStart();
     if (!s.length) return null;
@@ -53,7 +49,6 @@ function cqParseJsonBody(text) {
     } catch (e) {
         const recovered = cqExtractFirstJsonValue(raw);
         if (recovered !== null) {
-            console.warn('CQ API: в ответе после JSON был лишний текст; используется первый JSON-объект.');
             return recovered;
         }
         throw e;
@@ -74,7 +69,6 @@ const API = {
         return h;
     },
 
-    /** Редирект на вход и исключение, чтобы await API.* не получал undefined. */
     _failSession(msg) {
         localStorage.clear();
         window.location.href = '/index.html';
@@ -100,7 +94,7 @@ const API = {
             } catch {
                 err = {};
             }
-            throw new Error(err.error || 'Не найдено. Выполните mvn package и перезапустите Spring Boot (старый процесс на порту 8080 нужно остановить).');
+            throw new Error(err.error || 'Не найдено. Перезапустите приложение после mvn package.');
         }
         if (!res.ok) {
             let err = {};
@@ -135,7 +129,7 @@ const API = {
             this._handleAuthError(err);
             throw new Error(err.error || 'Ошибка запроса');
         }
-        return cqParseJsonBody(text);
+        return text.trim() ? cqParseJsonBody(text) : null;
     },
 
     async put(path, body) {
@@ -182,7 +176,6 @@ const API = {
         }
     },
 
-    /** Бинарный ответ (PDF и т.п.) */
     async getBlob(path) {
         const h = {};
         const t = this.token();

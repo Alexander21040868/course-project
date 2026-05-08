@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -47,6 +48,14 @@ public class AdminController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/lessons/{id}/tasks")
+    public ResponseEntity<Map<String, Object>> attachTasksToLesson(@PathVariable("id") Long id,
+                                                                    @RequestBody Map<String, List<Long>> body) {
+        List<Long> ids = body.getOrDefault("taskIds", List.of());
+        List<Long> attached = lessonService.attachTasks(id, ids);
+        return ResponseEntity.ok(Map.of("attachedTaskIds", attached));
+    }
+
     @PostMapping("/tasks")
     public ResponseEntity<TaskDto> createTask(@Valid @RequestBody TaskCreateRequest req) {
         return ResponseEntity.ok(taskService.create(req));
@@ -76,13 +85,32 @@ public class AdminController {
     }
 
     @GetMapping("/students")
-    public ResponseEntity<List<StudentProgressDto>> getStudentsProgress() {
-        return ResponseEntity.ok(studentProgressService.listStudents());
+    public ResponseEntity<List<StudentProgressDto>> getStudentsProgress(Principal principal) {
+        return ResponseEntity.ok(studentProgressService.listGroup(principal.getName()));
+    }
+
+    @GetMapping("/students/available")
+    public ResponseEntity<List<StudentSummaryDto>> getAvailableStudents(
+            @RequestParam(value = "search", required = false) String search,
+            Principal principal) {
+        return ResponseEntity.ok(studentProgressService.listAvailable(principal.getName(), search));
+    }
+
+    @PostMapping("/students/{id}/assign")
+    public ResponseEntity<Void> assignStudentToGroup(@PathVariable("id") Long id, Principal principal) {
+        studentProgressService.assignToGroup(id, principal.getName());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/students/{id}/assign")
+    public ResponseEntity<Void> removeStudentFromGroup(@PathVariable("id") Long id, Principal principal) {
+        studentProgressService.removeFromGroup(id, principal.getName());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/students/{id}")
-    public ResponseEntity<StudentDetailDto> getStudentDetail(@PathVariable("id") Long id) {
-        return ResponseEntity.ok(studentProgressService.getDetail(id));
+    public ResponseEntity<StudentDetailDto> getStudentDetail(@PathVariable("id") Long id, Principal principal) {
+        return ResponseEntity.ok(studentProgressService.getDetail(id, principal.getName()));
     }
 
     @PostMapping("/articles")

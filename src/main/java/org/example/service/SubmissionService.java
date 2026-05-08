@@ -193,7 +193,6 @@ public class SubmissionService {
         if (a.equals(e)) {
             return true;
         }
-        // Совпадение по строкам с обрезкой хвостовых пробелов (типичные расхождения printf / \n)
         return normalizeLines(a).equals(normalizeLines(e));
     }
 

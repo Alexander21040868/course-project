@@ -21,9 +21,6 @@ public class GlobalExceptionHandler {
                 .body(Map.of("error", e.getMessage()));
     }
 
-    /**
-     * Иначе широкий handleGeneral превращает «нет маршрута» в 500 с текстом про static resource.
-     */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<Map<String, String>> handleNoResource(NoResourceFoundException e) {
         String path = e.getResourcePath();

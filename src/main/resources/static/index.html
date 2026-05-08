@@ -34,7 +34,6 @@
             overflow: hidden;
         }
 
-        /* animated background grid */
         body::before {
             content: '';
             position: fixed;
@@ -51,7 +50,6 @@
             to { transform: translate(40px, 40px); }
         }
 
-        /* floating particles */
         .particles {
             position: fixed;
             inset: 0;
@@ -259,7 +257,6 @@
 
             <div id="error" class="error-msg"></div>
 
-            <!-- Login -->
             <div class="tab-content active" id="tab-login">
                 <form id="loginForm">
                     <div class="form-group">
@@ -274,7 +271,6 @@
                 </form>
             </div>
 
-            <!-- Register -->
             <div class="tab-content" id="tab-register">
                 <form id="registerForm">
                     <div class="form-group">
@@ -298,12 +294,10 @@
     </div>
 
     <script>
-        // redirect if already logged in
         if (localStorage.getItem('cq_token')) {
             window.location.href = '/app.html';
         }
 
-        // particles
         const particlesEl = document.getElementById('particles');
         for (let i = 0; i < 30; i++) {
             const s = document.createElement('span');
@@ -314,7 +308,6 @@
             particlesEl.appendChild(s);
         }
 
-        // tabs
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));

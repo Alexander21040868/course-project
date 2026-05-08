@@ -14,7 +14,6 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     long countByUserIdAndStatus(Long userId, SubmissionStatus status);
     boolean existsByUserIdAndTaskIdAndStatus(Long userId, Long taskId, SubmissionStatus status);
 
-    /** Явный DISTINCT по задаче: производный countDistinct* в Spring Data давал подсчёт отправок, а не уникальных задач. */
     @Query("SELECT COUNT(DISTINCT s.task.id) FROM Submission s WHERE s.user.id = :userId AND s.status = :status")
     long countDistinctTaskByUserIdAndStatus(@Param("userId") Long userId, @Param("status") SubmissionStatus status);
 }

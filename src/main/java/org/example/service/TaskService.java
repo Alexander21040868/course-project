@@ -57,8 +57,8 @@ public class TaskService {
         return taskRepo.findAllByOrderByIdAsc(p).map(task -> toDto(task, userId));
     }
 
-    /** Строка из одних цифр или `#12` — точный поиск по id задачи. */
     private static Optional<Long> parseNumericIdQuery(String trimmed) {
+
         if (!trimmed.matches("#?\\d+")) {
             return Optional.empty();
         }

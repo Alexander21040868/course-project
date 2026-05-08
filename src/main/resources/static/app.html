@@ -64,14 +64,11 @@
         </header>
 
         <main class="main-content">
-            <!-- QUESTS -->
             <div class="view active" id="view-quests">
                 <div id="dailyTaskCard" class="daily-card" style="display:none"></div>
                 <div class="quest-map" id="questMap"></div>
                 <div class="pager-row" id="questPager" style="display:none"></div>
             </div>
-
-            <!-- LESSON -->
             <div class="view" id="view-lesson">
                 <button class="back-btn" id="backToQuests">← Назад к карте</button>
                 <div class="lesson-header"><h2 id="lessonTitle"></h2></div>
@@ -79,8 +76,6 @@
                 <h3 style="font-family:var(--pixel);font-size:11px;margin-bottom:16px;">⚔ Задачи подземелья</h3>
                 <div class="task-list" id="taskList"></div>
             </div>
-
-            <!-- TASK -->
             <div class="view" id="view-task">
                 <button class="back-btn" id="backToLesson">← Назад к уроку</button>
                 <div class="task-header">
@@ -117,8 +112,6 @@
                     <div id="taskHistoryList"></div>
                 </details>
             </div>
-
-            <!-- LIBRARY -->
             <div class="view" id="view-library">
                 <div class="search-bar">
                     <input type="text" id="librarySearch" placeholder="Заголовок или только id / #id — откроется справа" autocomplete="off">
@@ -128,8 +121,6 @@
                     <div class="library-article" id="libraryArticle"><p class="empty-hint">Выберите статью слева</p></div>
                 </div>
             </div>
-
-            <!-- CATALOG -->
             <div class="view" id="view-catalog">
                 <div class="search-bar">
                     <input type="text" id="catalogSearch" placeholder="Название или id / #id задачи…" autocomplete="off">
@@ -137,20 +128,10 @@
                 <div class="task-list" id="catalogList"></div>
                 <div class="pager-row" id="catalogPager" style="display:none"></div>
             </div>
-
-            <!-- LEADERBOARD -->
             <div class="view" id="view-leaderboard"><div id="leaderboardContent"></div></div>
-
-            <!-- CHALLENGES -->
             <div class="view" id="view-challenges"><div id="challengesList"></div></div>
-
-            <!-- ACHIEVEMENTS -->
             <div class="view" id="view-achievements"><div class="achievements-grid" id="achGrid"></div></div>
-
-            <!-- PROFILE -->
             <div class="view" id="view-profile"><div id="profileContent"></div></div>
-
-            <!-- ADMIN -->
             <div class="view" id="view-admin">
                 <div class="admin-tabs">
                     <button class="admin-tab active" data-atab="content">Контент</button>
@@ -196,9 +177,23 @@
                             <div><label>Описание</label><input type="text" name="description" placeholder="Краткое описание"></div>
                             <div><label>Содержание (HTML)</label><textarea name="content" placeholder="<p>Теория...</p>"></textarea></div>
                             <div><label>Порядковый номер</label><input type="number" name="orderIndex" value="0"></div>
+                            <div>
+                                <label>Прикрепить существующие задачи (id через запятую)</label>
+                                <input type="text" name="taskIds" placeholder="например: 1, 4, 7" autocomplete="off">
+                                <p class="admin-tc-hint">Эти задачи будут перенесены в текущий урок при сохранении. Поле необязательное.</p>
+                            </div>
                             <button type="submit" class="btn-admin" id="lessonFormSubmitBtn">Создать урок</button>
                         </form>
                         <input type="hidden" id="editLessonId" value="" autocomplete="off">
+                    </div>
+                    <div class="admin-section">
+                        <h3>🔗 Добавить задачи в существующий урок</h3>
+                        <p class="admin-edit-hint">Удобно, если задачи уже созданы и нужно собрать их в урок. Введите id урока и id задач — задачи переместятся в этот урок.</p>
+                        <form class="admin-form" id="attachTasksForm">
+                            <div><label>Id урока</label><input type="number" name="lessonId" min="1" required placeholder="например: 3"></div>
+                            <div><label>Id задач (через запятую)</label><input type="text" name="taskIds" required placeholder="2, 5, 8"></div>
+                            <button type="submit" class="btn-admin">Прикрепить</button>
+                        </form>
                     </div>
                     <div class="admin-section">
                         <h3>⚔ Создать задачу</h3>
@@ -230,7 +225,21 @@
                         <input type="hidden" id="editTaskId" value="" autocomplete="off">
                     </div>
                 </div>
-                <div class="admin-panel" id="atab-students"><div id="studentsTable"></div></div>
+                <div class="admin-panel" id="atab-students">
+                    <div class="admin-section">
+                        <h3>👥 Моя группа</h3>
+                        <p class="admin-edit-hint">Здесь видны только ваши студенты. Чтобы добавить кого-то в группу, найдите его ниже по имени.</p>
+                        <div id="myGroupTable"></div>
+                    </div>
+                    <div class="admin-section">
+                        <h3>➕ Добавить ученика в группу</h3>
+                        <div class="group-search-row">
+                            <input type="text" id="studentSearch" placeholder="Имя ученика (можно часть)" autocomplete="off">
+                            <button type="button" class="btn-admin btn-admin-ghost" id="studentSearchBtn">Найти</button>
+                        </div>
+                        <div id="studentSearchResults"></div>
+                    </div>
+                </div>
                 <div class="admin-panel" id="atab-challengeAdmin">
                     <div class="admin-section">
                         <h3>🏟 Создать челлендж</h3>

@@ -1,4 +1,3 @@
-/** Звуки через Web Audio; первый клик по странице активирует AudioContext. */
 (function () {
     const KEY = 'cq_mute';
     window.CQSound = {
@@ -82,7 +81,6 @@ document.addEventListener('DOMContentLoaded', () => {
     applyTheme(localStorage.getItem('cq_theme') === 'light');
     $('themeToggle').addEventListener('click', () => applyTheme(!document.body.classList.contains('light')));
 
-    // ── Navigation ──
     document.querySelectorAll('.nav-item[data-view]').forEach(btn =>
         btn.addEventListener('click', () => navigateTo(btn.dataset.view)));
     $('charCardLink').addEventListener('click', () => navigateTo('profile'));
@@ -95,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         $('atab-' + btn.dataset.atab).classList.add('active');
-        if (btn.dataset.atab === 'students') loadStudents();
+        if (btn.dataset.atab === 'students') loadGroup();
     }));
 
     let catalogTimer;
@@ -133,7 +131,6 @@ document.addEventListener('DOMContentLoaded', () => {
         $('view-' + view).classList.add('active');
     }
 
-    // ── Profile (sidebar) ──
     async function loadProfile() {
         try {
             const p = await API.get('/profile');
@@ -163,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const b = $('notifBadge');
             if (n > 0) { b.textContent = n > 9 ? '9+' : n; b.style.display = ''; }
             else b.style.display = 'none';
-        } catch (e) { /* ignore */ }
+        } catch (e) {}
     }
 
     async function openNotifDropdown() {
@@ -206,7 +203,6 @@ document.addEventListener('DOMContentLoaded', () => {
         libTimer = setTimeout(() => loadLibrary($('librarySearch').value), 300);
     });
 
-    /** `#12` или `12` в запросе — поиск по id; убираем `#` до encode, чтобы не ломать URL. */
     function normalizeIdSearchQuery(s) {
         const t = (s || '').trim();
         return t.replace(/^#(?=\d+$)/, '');
@@ -286,7 +282,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return 'Новобранец';
     }
 
-    // ── Full Profile (без достижений — есть отдельная вкладка) ──
     async function loadFullProfile() {
         const el = $('profileContent');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
@@ -326,7 +321,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { el.innerHTML = `<div class="empty-state"><p>Ошибка: ${esc(e.message)}</p></div>`; }
     }
 
-    // ── Catalog (пул задач, пагинация) ──
     async function loadCatalog(search, page) {
         const pg = page ?? state.catalogPage;
         state.catalogPage = pg;
@@ -376,7 +370,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; pagerEl.style.display = 'none'; }
     }
 
-    // ── Leaderboard ──
     async function loadLeaderboard(sort = 'rating') {
         const el = $('leaderboardContent');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
@@ -402,7 +395,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; }
     }
 
-    // ── Daily Task ──
     async function loadDailyTask() {
         try {
             const t = await API.get('/daily-task');
@@ -419,7 +411,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { $('dailyTaskCard').style.display = 'none'; }
     }
 
-    // ── Lessons (пагинация) ──
     async function loadLessons(page) {
         if (page !== undefined) state.lessonPage = page;
         const pg = state.lessonPage;
@@ -525,7 +516,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { $('taskDesc').textContent = 'Ошибка: ' + e.message; }
     }
 
-    // ── Task History (с кодом посылки, как Я.Контест) ──
     async function loadTaskHistory(taskId) {
         try {
             const history = await API.get('/submissions/task/' + taskId);
@@ -566,7 +556,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { showToast('🤖', 'Подсказка', e.message); }
     });
 
-    // ── Submit ──
     $('submitBtn').addEventListener('click', async () => {
         const code = (state.cm ? state.cm.getValue() : $('codeEditor').value).trim();
         if (!code) return;
@@ -600,7 +589,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally { $('submitBtn').disabled = false; $('submitSpinner').style.display = 'none'; }
     });
 
-    // ── Challenges ──
     async function loadChallenges() {
         const el = $('challengesList');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
@@ -646,7 +634,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; }
     }
 
-    // ── Achievements ──
     async function loadAchievements() {
         const el = $('achGrid');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
@@ -658,8 +645,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { el.innerHTML = `<div class="empty-state"><p>${esc(e.message)}</p></div>`; }
     }
 
-    // ── Admin ──
-    /** У `<form>` свойство `.title` — это подсказка элемента, а не поле `name="title"`. */
     function formField(form, name) {
         const el = form && form.elements.namedItem(name);
         return el && 'value' in el ? el : null;
@@ -669,16 +654,86 @@ document.addEventListener('DOMContentLoaded', () => {
         if (el) el.value = val == null ? '' : String(val);
     }
 
-    async function loadStudents() {
-        const el = $('studentsTable');
+    async function loadGroup() {
+        await renderMyGroup();
+        await renderStudentSearch('');
+    }
+
+    async function renderMyGroup() {
+        const el = $('myGroupTable');
+        if (!el) return;
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
             const students = await API.get('/admin/students');
-            if (!students.length) { el.innerHTML = '<p style="color:var(--text-dim)">Нет студентов</p>'; return; }
-            el.innerHTML = '<table class="results-table"><tr><th>Герой</th><th>XP</th><th>LVL</th><th>Решено</th><th>Прогресс</th></tr>' +
-                students.map(s => `<tr><td>${esc(s.username)}</td><td>${s.xp}</td><td>${s.level}</td><td>${s.totalSolved}/${s.totalTasks}</td><td><div class="mini-bar"><div class="mini-fill" style="width:${s.solvedPercent}%"></div></div></td></tr>`).join('') + '</table>';
-        } catch (e) { el.innerHTML = '<p>Ошибка</p>'; }
+            if (!students.length) {
+                el.innerHTML = '<div class="empty-row">В вашей группе пока нет учеников.</div>';
+                return;
+            }
+            el.innerHTML =
+                '<table class="results-table"><tr><th>Герой</th><th>XP</th><th>LVL</th><th>Решено</th><th>Прогресс</th><th></th></tr>' +
+                students.map(s => `<tr>
+                    <td>${esc(s.username)}</td>
+                    <td>${s.xp}</td>
+                    <td>${s.level}</td>
+                    <td>${s.totalSolved}/${s.totalTasks}</td>
+                    <td><div class="mini-bar"><div class="mini-fill" style="width:${s.solvedPercent}%"></div></div></td>
+                    <td><button type="button" class="btn-group-action btn-remove" data-remove="${s.userId}">Убрать</button></td>
+                </tr>`).join('') + '</table>';
+            el.querySelectorAll('[data-remove]').forEach(b =>
+                b.addEventListener('click', async () => {
+                    if (!confirm('Убрать ученика из вашей группы?')) return;
+                    try {
+                        await API.delete('/admin/students/' + b.dataset.remove + '/assign');
+                        showToast('👥', 'Ученик убран из группы', '');
+                        loadGroup();
+                    } catch (e) { alert(e.message); }
+                }));
+        } catch (e) {
+            el.innerHTML = `<p style="color:var(--text-dim)">${esc(e.message)}</p>`;
+        }
     }
+
+    async function renderStudentSearch(query) {
+        const el = $('studentSearchResults');
+        if (!el) return;
+        el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+        try {
+            const q = (query || '').trim();
+            const path = '/admin/students/available' + (q ? '?search=' + encodeURIComponent(q) : '');
+            const students = await API.get(path);
+            if (!students.length) {
+                el.innerHTML = '<div class="empty-row">Подходящих учеников не найдено.</div>';
+                return;
+            }
+            el.innerHTML = '<div class="group-list">' + students.map(s => `
+                <div class="group-list-row">
+                    <div>
+                        <div>${esc(s.username)}</div>
+                        ${s.teacherUsername ? `<div class="gl-meta">сейчас в группе: ${esc(s.teacherUsername)}</div>` : '<div class="gl-meta">без группы</div>'}
+                    </div>
+                    <div class="gl-meta">#${s.userId}</div>
+                    <button type="button" class="btn-group-action btn-add" data-add="${s.userId}">${s.teacherUsername ? 'Перевести' : 'Добавить'}</button>
+                </div>`).join('') + '</div>';
+            el.querySelectorAll('[data-add]').forEach(b =>
+                b.addEventListener('click', async () => {
+                    try {
+                        await API.post('/admin/students/' + b.dataset.add + '/assign', {});
+                        showToast('👥', 'Ученик добавлен в группу', '');
+                        loadGroup();
+                    } catch (e) { alert(e.message); }
+                }));
+        } catch (e) {
+            el.innerHTML = `<p style="color:var(--text-dim)">${esc(e.message)}</p>`;
+        }
+    }
+
+    let studentSearchTimer;
+    $('studentSearch')?.addEventListener('input', () => {
+        clearTimeout(studentSearchTimer);
+        studentSearchTimer = setTimeout(() => renderStudentSearch($('studentSearch').value || ''), 300);
+    });
+    $('studentSearchBtn')?.addEventListener('click', () =>
+        renderStudentSearch($('studentSearch').value || ''));
 
     const taskExampleRowHtml = () => `
         <div class="admin-example-row">
@@ -702,7 +757,6 @@ document.addEventListener('DOMContentLoaded', () => {
         bindExampleRow(box.firstElementChild);
     }
 
-    /** Собирает пары ввода/вывода для API (поле testCases — внутреннее имя сущности). */
     function collectTaskExamplesForApi() {
         const box = $('taskExamples');
         if (!box) return [];
@@ -769,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setFormField(f, 'description', d.description);
             setFormField(f, 'content', d.content);
             setFormField(f, 'orderIndex', d.orderIndex ?? 0);
+            setFormField(f, 'taskIds', '');
             $('editLessonId').value = String(d.id);
             $('lessonFormSubmitBtn').textContent = 'Сохранить урок';
         } catch (err) { alert(err.message); }
@@ -832,10 +887,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     $('articleContent')?.addEventListener('input', () => syncArticlePreview());
 
+    function parseIdList(raw) {
+        if (!raw) return [];
+        return String(raw).split(/[\s,;]+/).map(s => +s).filter(n => Number.isFinite(n) && n > 0);
+    }
+
     $('createLessonForm').addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(e.target);
-        const body = { title: fd.get('title'), description: fd.get('description'), content: fd.get('content'), orderIndex: +fd.get('orderIndex') };
+        const taskIds = parseIdList(fd.get('taskIds'));
+        const body = {
+            title: fd.get('title'),
+            description: fd.get('description'),
+            content: fd.get('content'),
+            orderIndex: +fd.get('orderIndex'),
+            taskIds
+        };
         const lid = $('editLessonId').value;
         try {
             const saved = lid
@@ -851,7 +918,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 $('lessonFormSubmitBtn').textContent = 'Создать урок';
                 if (saved?.id != null) $('loadLessonId').value = String(saved.id);
             }
-            showToast('📖', lid ? 'Урок сохранён' : 'Урок создан', '');
+            const detail = taskIds.length ? `Прикреплено задач: ${taskIds.length}` : '';
+            showToast('📖', lid ? 'Урок сохранён' : 'Урок создан', detail);
+        } catch (err) { alert(err.message); }
+    });
+
+    $('attachTasksForm')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const lessonId = +fd.get('lessonId');
+        const taskIds = parseIdList(fd.get('taskIds'));
+        if (!lessonId || !taskIds.length) {
+            alert('Укажите id урока и хотя бы один id задачи.');
+            return;
+        }
+        try {
+            const r = await API.post('/admin/lessons/' + lessonId + '/tasks', { taskIds });
+            const n = (r && r.attachedTaskIds && r.attachedTaskIds.length) || taskIds.length;
+            showToast('🔗', 'Задачи прикреплены', `Урок #${lessonId}: ${n} задач(и)`);
+            e.target.reset();
         } catch (err) { alert(err.message); }
     });
     $('createTaskForm').addEventListener('submit', async e => {
@@ -931,10 +1016,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (err) { alert(err.message); }
     });
 
-    // ── Helpers ──
     function diffLabel(d) { return { EASY:'🟢 Лёгкая', MEDIUM:'🟡 Средняя', HARD:'🔴 Сложная' }[d] || d; }
     function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-    /** SQL-строки часто хранят буквальные \n вместо перевода строки — иначе Markdown ломается */
     function mdFromApi(s) {
         if (!s) return '';
         return s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\r/g, '\r');
@@ -948,7 +1031,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Tab') { e.preventDefault(); const s = $('codeEditor').selectionStart; $('codeEditor').value = $('codeEditor').value.substring(0,s)+'    '+$('codeEditor').value.substring($('codeEditor').selectionEnd); $('codeEditor').selectionStart = $('codeEditor').selectionEnd = s+4; }
     });
 
-    // ── CodeMirror ──
     if (typeof CodeMirror !== 'undefined') {
         state.cm = CodeMirror.fromTextArea($('codeEditor'), {
             mode: 'text/x-csrc',
@@ -959,7 +1041,6 @@ document.addEventListener('DOMContentLoaded', () => {
         state.cm.setSize('100%', 280);
     }
 
-    // ── Level Up Animation ──
     let prevLevel = null;
     const origLoadProfile = loadProfile;
     loadProfile = async function () {

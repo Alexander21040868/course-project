@@ -47,7 +47,6 @@ public class ArticleService {
                 .toList();
     }
 
-    /** Строка из одних цифр или `#12` — точный поиск по id статьи. */
     private static Optional<Long> parseNumericIdQuery(String trimmed) {
         if (!trimmed.matches("#?\\d+")) {
             return Optional.empty();

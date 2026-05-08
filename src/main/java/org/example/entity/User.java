@@ -43,6 +43,10 @@ public class User {
     @Column(name = "last_solved_date")
     private LocalDate lastSolvedDate;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "teacher_id")
+    private User teacher;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -55,12 +59,11 @@ public class User {
         this.role = role;
     }
 
-    // --- getters / setters ---
-
     public Long getId() { return id; }
 
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
+
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
@@ -88,6 +91,9 @@ public class User {
 
     public LocalDate getLastSolvedDate() { return lastSolvedDate; }
     public void setLastSolvedDate(LocalDate lastSolvedDate) { this.lastSolvedDate = lastSolvedDate; }
+
+    public User getTeacher() { return teacher; }
+    public void setTeacher(User teacher) { this.teacher = teacher; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

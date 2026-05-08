@@ -3,6 +3,7 @@ package org.example.service;
 import org.example.dto.LessonCreateRequest;
 import org.example.dto.LessonDto;
 import org.example.entity.Lesson;
+import org.example.entity.Task;
 import org.example.entity.User;
 import org.example.repository.LessonRepository;
 import org.example.repository.TaskRepository;
@@ -13,6 +14,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
@@ -57,6 +62,9 @@ public class LessonService {
         lesson.setAuthor(author);
 
         Lesson saved = lessonRepo.save(lesson);
+        if (req.taskIds() != null && !req.taskIds().isEmpty()) {
+            attachTasks(saved.getId(), req.taskIds());
+        }
         log.info("Урок создан: id={} title={}", saved.getId(), saved.getTitle());
         notificationService.notifyAllStudents("Новый урок", "Опубликовано подземелье: " + saved.getTitle());
         return toDto(saved);
@@ -71,6 +79,9 @@ public class LessonService {
         lesson.setContent(req.content());
         lesson.setOrderIndex(req.orderIndex());
         Lesson saved = lessonRepo.save(lesson);
+        if (req.taskIds() != null && !req.taskIds().isEmpty()) {
+            attachTasks(saved.getId(), req.taskIds());
+        }
         log.info("Урок обновлён: id={}", id);
         return toDto(saved);
     }
@@ -79,6 +90,27 @@ public class LessonService {
     public void delete(Long id) {
         log.info("Урок удалён: id={}", id);
         lessonRepo.deleteById(id);
+    }
+
+    @Transactional(readOnly = false)
+    public List<Long> attachTasks(Long lessonId, List<Long> taskIds) {
+        Lesson lesson = lessonRepo.findById(lessonId)
+                .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+        List<Task> existing = taskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId);
+        int nextIndex = existing.stream().mapToInt(Task::getOrderIndex).max().orElse(-1) + 1;
+
+        List<Long> attached = new ArrayList<>();
+        for (Long taskId : new LinkedHashSet<>(taskIds)) {
+            Task task = taskRepo.findById(taskId)
+                    .orElseThrow(() -> new IllegalArgumentException("Задача #" + taskId + " не найдена"));
+            if (task.getLesson() == null || !task.getLesson().getId().equals(lessonId)) {
+                task.setLesson(lesson);
+                task.setOrderIndex(nextIndex++);
+                taskRepo.save(task);
+            }
+            attached.add(task.getId());
+        }
+        return attached;
     }
 
     private LessonDto toDto(Lesson l) {

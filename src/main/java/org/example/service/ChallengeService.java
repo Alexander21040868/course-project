@@ -96,8 +96,7 @@ public class ChallengeService {
         List<ChallengeParticipant> participants =
                 participantRepo.findByChallengeIdOrderByTasksSolvedDesc(challengeId);
 
-        // id → {user, solved}
-        List<long[]> standings = new ArrayList<>(); // [userId, rating, solved]
+        List<long[]> standings = new ArrayList<>();
         Map<Long, User> userMap = new HashMap<>();
 
         for (ChallengeParticipant cp : participants) {
@@ -111,7 +110,6 @@ public class ChallengeService {
         }
         standings.sort((a, b) -> Long.compare(b[2], a[2]));
 
-        // ELO: считаем при завершении контеста (однократно)
         Map<Long, Integer> deltas = standings.size() >= 2
                 ? calculateEloDeltas(standings) : Map.of();
 
@@ -134,12 +132,6 @@ public class ChallengeService {
         }).toList();
     }
 
-    /**
-     * Попарный ELO (как Codeforces):
-     * Pij = 1 / (1 + 10^((Rj-Ri)/400))
-     * Sij = 1 если solved_i > solved_j, 0.5 если ==, 0 если <
-     * delta_i = K * Σ(Sij - Pij) / (N-1)
-     */
     private Map<Long, Integer> calculateEloDeltas(List<long[]> standings) {
         Map<Long, Integer> deltas = new HashMap<>();
         int n = standings.size();

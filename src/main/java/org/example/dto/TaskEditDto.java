@@ -2,7 +2,6 @@ package org.example.dto;
 
 import java.util.List;
 
-/** Полные данные задачи для формы редактирования (преподаватель). */
 public record TaskEditDto(
         Long id,
         Long lessonId,

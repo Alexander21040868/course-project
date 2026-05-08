@@ -66,7 +66,6 @@ CREATE TABLE user_achievements (
     UNIQUE (user_id, achievement_id)
 );
 
--- Начальные достижения
 INSERT INTO achievements (code, name, description, icon, xp_reward, threshold) VALUES
     ('FIRST_BLOOD',  'Первая кровь',     'Решите свою первую задачу',      '⚔️', 50,  1),
     ('SOLVER_10',    'Подмастерье',       'Решите 10 задач',               '🔧', 100, 10),
