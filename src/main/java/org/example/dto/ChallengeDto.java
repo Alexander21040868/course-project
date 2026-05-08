@@ -6,5 +6,5 @@ public record ChallengeDto(
     Long id, String title, String description,
     LocalDateTime startTime, LocalDateTime endTime,
     int bonusXp, String createdByName,
-    int taskCount, boolean joined, boolean active
+    int taskCount, boolean joined, boolean active, boolean upcoming
 ) {}

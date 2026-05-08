@@ -154,40 +154,76 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function refreshNotifCount() {
         try {
-            const c = await API.get('/notifications/count');
-            if (!c) return;
-            const n = c.unread || 0;
+            const [c, ic] = await Promise.all([
+                API.get('/notifications/count').catch(() => ({ unread: 0 })),
+                API.get('/group-invites/incoming/count').catch(() => ({ count: 0 }))
+            ]);
+            const n = (c?.unread || 0) + (ic?.count || 0);
             const b = $('notifBadge');
             if (n > 0) { b.textContent = n > 9 ? '9+' : n; b.style.display = ''; }
             else b.style.display = 'none';
         } catch (e) {}
     }
 
+    function inviteHtml(inv) {
+        const groupTag = inv.groupName ? ` → ${esc(inv.groupName)}` : '';
+        return `<div class="notif-item invite" data-iid="${inv.id}">
+            <strong>📩 Приглашение от ${esc(inv.teacherUsername)}${groupTag}</strong>
+            <p>Учитель приглашает вас в свою группу.</p>
+            <div class="invite-actions">
+                <button class="btn-admin" data-act="accept">Принять</button>
+                <button class="btn-admin btn-admin-ghost" data-act="decline">Отклонить</button>
+            </div>
+        </div>`;
+    }
+
     async function openNotifDropdown() {
         const dd = $('notifDropdown');
         try {
-            const list = await API.get('/notifications') || [];
-            if (!list.length) dd.innerHTML = '<div class="notif-empty">Нет новых уведомлений</div>';
-            else {
-                dd.innerHTML = list.map(n => `
+            const [invites, list] = await Promise.all([
+                API.get('/group-invites/incoming').catch(() => []),
+                API.get('/notifications').catch(() => [])
+            ]);
+            const sections = [];
+            if (invites && invites.length) {
+                sections.push(`<div class="notif-section-title">Приглашения</div>` + invites.map(inviteHtml).join(''));
+            }
+            if (list && list.length) {
+                sections.push(`<div class="notif-section-title">Уведомления</div>` + list.map(n => `
                     <div class="notif-item" data-nid="${n.id}">
                         <strong>${esc(n.title)}</strong>
                         <p>${esc(n.message)}</p>
-                    </div>`).join('');
-                dd.querySelectorAll('.notif-item').forEach(el => el.addEventListener('click', async () => {
-                    try {
-                        await fetch(API.base + '/notifications/' + el.dataset.nid + '/read', {
-                            method: 'PUT', headers: API.headers()
-                        });
-                        el.remove();
-                        refreshNotifCount();
-                        if (!$('notifDropdown').querySelector('.notif-item')) $('notifDropdown').innerHTML = '<div class="notif-empty">Нет новых уведомлений</div>';
-                    } catch (e) { console.error(e); }
-                }));
+                    </div>`).join(''));
             }
+            dd.innerHTML = sections.length ? sections.join('') : '<div class="notif-empty">Нет новых уведомлений</div>';
+
+            dd.querySelectorAll('.notif-item.invite .invite-actions button').forEach(btn => {
+                btn.addEventListener('click', async (ev) => {
+                    ev.stopPropagation();
+                    const item = btn.closest('.notif-item.invite');
+                    const id = item.dataset.iid;
+                    try {
+                        await API.post('/group-invites/' + id + '/' + btn.dataset.act, {});
+                        item.remove();
+                        refreshNotifCount();
+                    } catch (e) { alert(e.message); }
+                });
+            });
+            dd.querySelectorAll('.notif-item:not(.invite)').forEach(el => el.addEventListener('click', async () => {
+                try {
+                    await fetch(API.base + '/notifications/' + el.dataset.nid + '/read', {
+                        method: 'PUT', headers: API.headers()
+                    });
+                    el.remove();
+                    refreshNotifCount();
+                    if (!$('notifDropdown').querySelector('.notif-item')) $('notifDropdown').innerHTML = '<div class="notif-empty">Нет новых уведомлений</div>';
+                } catch (e) { console.error(e); }
+            }));
             dd.style.display = 'block';
         } catch (e) { dd.innerHTML = '<div class="notif-empty">Ошибка загрузки</div>'; dd.style.display = 'block'; }
     }
+
+    $('notifDropdown').addEventListener('click', e => e.stopPropagation());
 
     $('notifBell').addEventListener('click', e => {
         e.stopPropagation();
@@ -596,17 +632,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const chs = await API.get('/challenges');
             if (!chs.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚔</div><p>Нет активных челленджей.</p></div>'; return; }
             el.innerHTML = chs.map(c => {
-                const remaining = Math.max(0, Math.floor((new Date(c.endTime) - Date.now()) / 3600000));
-                return `<div class="challenge-card ${c.active?'':'ended'}">
+                const remainingH = Math.max(0, Math.floor((new Date(c.endTime) - Date.now()) / 3600000));
+                const tillStartH = Math.max(0, Math.floor((new Date(c.startTime) - Date.now()) / 3600000));
+                const status = c.active ? `⏱ Идёт • ${remainingH}ч осталось`
+                    : c.upcoming ? `🕒 Старт через ${tillStartH}ч`
+                    : '🏁 Завершён';
+                const cardClass = c.active ? 'active' : c.upcoming ? 'upcoming' : 'ended';
+                const canJoin = (c.active || c.upcoming) && !c.joined;
+                return `<div class="challenge-card ${cardClass}">
                     <div class="ch-header"><h3>${esc(c.title)}</h3><span class="ch-bonus">+${c.bonusXp} XP</span></div>
                     <p class="ch-desc">${esc(c.description || '')}</p>
                     <div class="ch-meta">
                         <span>⚔ ${c.taskCount} задач</span>
-                        <span>⏱ ${c.active ? remaining + 'ч' : 'Завершён'}</span>
+                        <span>${status}</span>
                     </div>
                     <div class="ch-actions">
-                        ${c.active && !c.joined ? `<button class="btn-join" data-id="${c.id}">Вступить</button>` : ''}
-                        ${c.joined ? '<span class="ch-joined">✓ Участвуете</span>' : ''}
+                        ${canJoin ? `<button class="btn-join" data-id="${c.id}">${c.upcoming ? 'Зарегистрироваться' : 'Вступить'}</button>` : ''}
+                        ${c.joined ? '<span class="ch-joined">✓ Вы зарегистрированы</span>' : ''}
                         <button class="btn-results" data-id="${c.id}">Таблица</button>
                     </div>
                     <div class="ch-results" id="ch-results-${c.id}" style="display:none"></div>
@@ -654,9 +696,55 @@ document.addEventListener('DOMContentLoaded', () => {
         if (el) el.value = val == null ? '' : String(val);
     }
 
+    let groupsCache = [];
+
     async function loadGroup() {
+        await renderGroups();
         await renderMyGroup();
         await renderStudentSearch('');
+    }
+
+    function fillGroupSelect(selectEl, includeAll, currentValue) {
+        if (!selectEl) return;
+        const opts = [];
+        if (includeAll) opts.push('<option value="">Все подгруппы</option>');
+        else opts.push('<option value="">Без подгруппы</option>');
+        groupsCache.forEach(g => opts.push(`<option value="${g.id}">${esc(g.name)} (${g.memberCount})</option>`));
+        selectEl.innerHTML = opts.join('');
+        if (currentValue != null) selectEl.value = String(currentValue);
+    }
+
+    async function renderGroups() {
+        const el = $('groupsGrid');
+        if (!el) return;
+        try {
+            groupsCache = await API.get('/admin/groups') || [];
+            if (!groupsCache.length) {
+                el.innerHTML = '<div class="empty-row">Подгрупп пока нет. Создайте первую.</div>';
+            } else {
+                el.innerHTML = groupsCache.map(g => `
+                    <div class="group-card">
+                        <div class="group-card-head">
+                            <div class="group-card-name">${esc(g.name)}</div>
+                            <div class="group-card-count">${g.memberCount} уч.</div>
+                        </div>
+                        <div class="group-card-actions">
+                            <button type="button" class="btn-admin btn-admin-ghost" data-del-group="${g.id}">Удалить</button>
+                        </div>
+                    </div>`).join('');
+                el.querySelectorAll('[data-del-group]').forEach(b => b.addEventListener('click', async () => {
+                    if (!confirm('Удалить подгруппу? Ученики останутся в вашей группе, но без подгруппы.')) return;
+                    try {
+                        await API.delete('/admin/groups/' + b.dataset.delGroup);
+                        await loadGroup();
+                    } catch (e) { alert(e.message); }
+                }));
+            }
+            fillGroupSelect($('groupFilter'), true, $('groupFilter')?.value);
+            fillGroupSelect($('inviteGroupSelect'), false, $('inviteGroupSelect')?.value);
+        } catch (e) {
+            el.innerHTML = `<p style="color:var(--text-dim)">${esc(e.message)}</p>`;
+        }
     }
 
     async function renderMyGroup() {
@@ -664,21 +752,42 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!el) return;
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
-            const students = await API.get('/admin/students');
+            const filter = $('groupFilter')?.value || '';
+            const all = await API.get('/admin/students');
+            const students = filter ? all.filter(s => String(s.groupId || '') === filter) : all;
             if (!students.length) {
-                el.innerHTML = '<div class="empty-row">В вашей группе пока нет учеников.</div>';
+                el.innerHTML = '<div class="empty-row">В выбранной подгруппе нет учеников.</div>';
                 return;
             }
+            const groupOptions = groupsCache.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
             el.innerHTML =
-                '<table class="results-table"><tr><th>Герой</th><th>XP</th><th>LVL</th><th>Решено</th><th>Прогресс</th><th></th></tr>' +
+                '<table class="results-table"><tr><th>Герой</th><th>XP</th><th>LVL</th><th>Решено</th><th>Прогресс</th><th>Подгруппа</th><th></th></tr>' +
                 students.map(s => `<tr>
                     <td>${esc(s.username)}</td>
                     <td>${s.xp}</td>
                     <td>${s.level}</td>
                     <td>${s.totalSolved}/${s.totalTasks}</td>
                     <td><div class="mini-bar"><div class="mini-fill" style="width:${s.solvedPercent}%"></div></div></td>
+                    <td>
+                        <select class="group-move-select" data-move="${s.userId}">
+                            <option value="">— нет —</option>
+                            ${groupOptions}
+                        </select>
+                    </td>
                     <td><button type="button" class="btn-group-action btn-remove" data-remove="${s.userId}">Убрать</button></td>
                 </tr>`).join('') + '</table>';
+            el.querySelectorAll('select[data-move]').forEach(sel => {
+                const sid = sel.dataset.move;
+                const current = students.find(x => x.userId == sid);
+                if (current?.groupId) sel.value = String(current.groupId);
+                sel.addEventListener('change', async () => {
+                    const groupId = sel.value ? Number(sel.value) : null;
+                    try {
+                        await API.put('/admin/students/' + sid + '/group', { groupId });
+                        await loadGroup();
+                    } catch (e) { alert(e.message); }
+                });
+            });
             el.querySelectorAll('[data-remove]').forEach(b =>
                 b.addEventListener('click', async () => {
                     if (!confirm('Убрать ученика из вашей группы?')) return;
@@ -712,14 +821,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${s.teacherUsername ? `<div class="gl-meta">сейчас в группе: ${esc(s.teacherUsername)}</div>` : '<div class="gl-meta">без группы</div>'}
                     </div>
                     <div class="gl-meta">#${s.userId}</div>
-                    <button type="button" class="btn-group-action btn-add" data-add="${s.userId}">${s.teacherUsername ? 'Перевести' : 'Добавить'}</button>
+                    <button type="button" class="btn-group-action btn-add" data-invite="${s.userId}" ${s.inviteSent ? 'disabled' : ''}>${s.inviteSent ? 'Запрос отправлен' : 'Пригласить'}</button>
                 </div>`).join('') + '</div>';
-            el.querySelectorAll('[data-add]').forEach(b =>
+            el.querySelectorAll('[data-invite]').forEach(b =>
                 b.addEventListener('click', async () => {
+                    const groupSel = $('inviteGroupSelect');
+                    const groupId = groupSel && groupSel.value ? Number(groupSel.value) : null;
                     try {
-                        await API.post('/admin/students/' + b.dataset.add + '/assign', {});
-                        showToast('👥', 'Ученик добавлен в группу', '');
-                        loadGroup();
+                        await API.post('/admin/students/' + b.dataset.invite + '/invite', { groupId });
+                        showToast('📩', 'Приглашение отправлено', '');
+                        renderStudentSearch(query);
                     } catch (e) { alert(e.message); }
                 }));
         } catch (e) {
@@ -734,6 +845,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     $('studentSearchBtn')?.addEventListener('click', () =>
         renderStudentSearch($('studentSearch').value || ''));
+
+    $('createGroupBtn')?.addEventListener('click', async () => {
+        const input = $('newGroupName');
+        const name = (input.value || '').trim();
+        if (!name) { alert('Введите название подгруппы'); return; }
+        try {
+            await API.post('/admin/groups', { name });
+            input.value = '';
+            await loadGroup();
+        } catch (e) { alert(e.message); }
+    });
+
+    $('groupFilter')?.addEventListener('change', renderMyGroup);
 
     const taskExampleRowHtml = () => `
         <div class="admin-example-row">

@@ -24,17 +24,20 @@ public class SubmissionService {
     private final TestCaseRepository testCaseRepo;
     private final GamificationService gamificationService;
     private final DockerCExecutionService cExec;
+    private final DailyTaskService dailyTaskService;
 
     public SubmissionService(SubmissionRepository submissionRepo, TaskRepository taskRepo,
                              UserRepository userRepo, TestCaseRepository testCaseRepo,
                              GamificationService gamificationService,
-                             DockerCExecutionService cExec) {
+                             DockerCExecutionService cExec,
+                             DailyTaskService dailyTaskService) {
         this.submissionRepo = submissionRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
         this.testCaseRepo = testCaseRepo;
         this.gamificationService = gamificationService;
         this.cExec = cExec;
+        this.dailyTaskService = dailyTaskService;
     }
 
     @Transactional
@@ -98,7 +101,11 @@ public class SubmissionService {
         if (correct) {
             gamificationService.updateStreak(user);
             if (!alreadySolved) {
-                xpEarned = gamificationService.addXp(user, task.getXpReward());
+                int reward = task.getXpReward();
+                if (dailyTaskService.isDailyTask(task.getId())) {
+                    reward *= 2;
+                }
+                xpEarned = gamificationService.addXp(user, reward);
                 newAchievements = gamificationService.checkAndGrantAchievements(user);
             }
         }

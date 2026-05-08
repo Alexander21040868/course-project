@@ -1,7 +1,6 @@
 package org.example.controller;
 
 import org.example.dto.LeaderboardEntryDto;
-import org.example.entity.Role;
 import org.example.entity.SubmissionStatus;
 import org.example.repository.SubmissionRepository;
 import org.example.repository.UserRepository;
@@ -29,8 +28,8 @@ public class LeaderboardController {
     public ResponseEntity<List<LeaderboardEntryDto>> get(
             @RequestParam(value = "sort", defaultValue = "rating") String sort) {
         var users = "xp".equals(sort)
-                ? userRepo.findTop50ByRoleOrderByXpDesc(Role.STUDENT)
-                : userRepo.findTop50ByRoleOrderByRatingDesc(Role.STUDENT);
+                ? userRepo.findTop50ByOrderByXpDesc()
+                : userRepo.findTop50ByOrderByRatingDesc();
 
         AtomicInteger rank = new AtomicInteger(1);
         var board = users.stream()

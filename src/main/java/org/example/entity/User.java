@@ -47,6 +47,10 @@ public class User {
     @JoinColumn(name = "teacher_id")
     private User teacher;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private StudyGroup studyGroup;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -94,6 +98,9 @@ public class User {
 
     public User getTeacher() { return teacher; }
     public void setTeacher(User teacher) { this.teacher = teacher; }
+
+    public StudyGroup getStudyGroup() { return studyGroup; }
+    public void setStudyGroup(StudyGroup studyGroup) { this.studyGroup = studyGroup; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

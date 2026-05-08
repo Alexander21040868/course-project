@@ -16,6 +16,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     List<User> findByRoleOrderByUsernameAsc(Role role);
     List<User> findByRoleAndTeacherIdOrderByUsernameAsc(Role role, Long teacherId);
     List<User> findByRoleAndTeacherIsNullOrderByUsernameAsc(Role role);
-    List<User> findTop50ByRoleOrderByXpDesc(Role role);
-    List<User> findTop50ByRoleOrderByRatingDesc(Role role);
+    List<User> findByRoleAndStudyGroupIdOrderByUsernameAsc(Role role, Long groupId);
+    long countByRoleAndStudyGroupId(Role role, Long groupId);
+    List<User> findTop50ByOrderByXpDesc();
+    List<User> findTop50ByOrderByRatingDesc();
 }

@@ -19,15 +19,20 @@ public class AdminController {
     private final ChallengeService challengeService;
     private final StudentProgressService studentProgressService;
     private final ArticleService articleService;
+    private final StudyGroupService studyGroupService;
+    private final GroupInviteService inviteService;
 
     public AdminController(LessonService lessonService, TaskService taskService,
                            ChallengeService challengeService, StudentProgressService studentProgressService,
-                           ArticleService articleService) {
+                           ArticleService articleService, StudyGroupService studyGroupService,
+                           GroupInviteService inviteService) {
         this.lessonService = lessonService;
         this.taskService = taskService;
         this.challengeService = challengeService;
         this.studentProgressService = studentProgressService;
         this.articleService = articleService;
+        this.studyGroupService = studyGroupService;
+        this.inviteService = inviteService;
     }
 
     @PostMapping("/lessons")
@@ -96,9 +101,16 @@ public class AdminController {
         return ResponseEntity.ok(studentProgressService.listAvailable(principal.getName(), search));
     }
 
-    @PostMapping("/students/{id}/assign")
-    public ResponseEntity<Void> assignStudentToGroup(@PathVariable("id") Long id, Principal principal) {
-        studentProgressService.assignToGroup(id, principal.getName());
+    @PostMapping("/students/{id}/invite")
+    public ResponseEntity<Void> inviteStudent(@PathVariable("id") Long id,
+                                              @RequestBody(required = false) Map<String, Object> body,
+                                              Principal principal) {
+        Long groupId = null;
+        if (body != null && body.get("groupId") != null) {
+            Object g = body.get("groupId");
+            if (g instanceof Number n) groupId = n.longValue();
+        }
+        inviteService.invite(id, groupId, principal.getName());
         return ResponseEntity.noContent().build();
     }
 
@@ -108,9 +120,37 @@ public class AdminController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/students/{id}/group")
+    public ResponseEntity<Void> moveStudentToSubgroup(@PathVariable("id") Long id,
+                                                      @RequestBody Map<String, Object> body,
+                                                      Principal principal) {
+        Long groupId = null;
+        Object g = body.get("groupId");
+        if (g instanceof Number n) groupId = n.longValue();
+        studyGroupService.moveStudent(id, groupId, principal.getName());
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/students/{id}")
     public ResponseEntity<StudentDetailDto> getStudentDetail(@PathVariable("id") Long id, Principal principal) {
         return ResponseEntity.ok(studentProgressService.getDetail(id, principal.getName()));
+    }
+
+    @GetMapping("/groups")
+    public ResponseEntity<List<StudyGroupDto>> listGroups(Principal principal) {
+        return ResponseEntity.ok(studyGroupService.listForTeacher(principal.getName()));
+    }
+
+    @PostMapping("/groups")
+    public ResponseEntity<StudyGroupDto> createGroup(@RequestBody Map<String, String> body,
+                                                      Principal principal) {
+        return ResponseEntity.ok(studyGroupService.create(principal.getName(), body.get("name")));
+    }
+
+    @DeleteMapping("/groups/{id}")
+    public ResponseEntity<Void> deleteGroup(@PathVariable("id") Long id, Principal principal) {
+        studyGroupService.delete(id, principal.getName());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/articles")

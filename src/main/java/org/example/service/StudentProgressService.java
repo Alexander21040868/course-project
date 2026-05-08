@@ -16,13 +16,16 @@ public class StudentProgressService {
     private final TaskRepository taskRepo;
     private final LessonRepository lessonRepo;
     private final SubmissionRepository submissionRepo;
+    private final GroupInviteRepository inviteRepo;
 
     public StudentProgressService(UserRepository userRepo, TaskRepository taskRepo,
-                                  LessonRepository lessonRepo, SubmissionRepository submissionRepo) {
+                                  LessonRepository lessonRepo, SubmissionRepository submissionRepo,
+                                  GroupInviteRepository inviteRepo) {
         this.userRepo = userRepo;
         this.taskRepo = taskRepo;
         this.lessonRepo = lessonRepo;
         this.submissionRepo = submissionRepo;
+        this.inviteRepo = inviteRepo;
     }
 
     public List<StudentProgressDto> listGroup(String teacherUsername) {
@@ -33,8 +36,11 @@ public class StudentProgressService {
                     long solved = submissionRepo.countDistinctTaskByUserIdAndStatus(
                             u.getId(), SubmissionStatus.CORRECT);
                     double pct = totalTasks > 0 ? (solved * 100.0 / totalTasks) : 0;
+                    StudyGroup g = u.getStudyGroup();
                     return new StudentProgressDto(u.getId(), u.getUsername(),
-                            u.getXp(), u.getLevel(), solved, totalTasks, Math.round(pct * 10) / 10.0);
+                            u.getXp(), u.getLevel(), solved, totalTasks, Math.round(pct * 10) / 10.0,
+                            g != null ? g.getId() : null,
+                            g != null ? g.getName() : null);
                 })
                 .toList();
     }
@@ -51,7 +57,10 @@ public class StudentProgressService {
                 .map(u -> new StudentSummaryDto(
                         u.getId(),
                         u.getUsername(),
-                        u.getTeacher() != null ? u.getTeacher().getUsername() : null))
+                        u.getTeacher() != null ? u.getTeacher().getUsername() : null,
+                        inviteRepo.existsByTeacherIdAndStudentIdAndStatus(
+                                teacher.getId(), u.getId(),
+                                org.example.entity.GroupInvite.Status.PENDING)))
                 .toList();
     }
 
@@ -90,21 +99,6 @@ public class StudentProgressService {
     }
 
     @Transactional
-    public void assignToGroup(Long studentId, String teacherUsername) {
-        User teacher = requireTeacher(teacherUsername);
-        User student = userRepo.findById(studentId)
-                .orElseThrow(() -> new IllegalArgumentException("Студент не найден"));
-        if (student.getRole() != Role.STUDENT) {
-            throw new IllegalArgumentException("Можно добавлять только студентов");
-        }
-        if (student.getTeacher() != null && student.getTeacher().getId().equals(teacher.getId())) {
-            throw new IllegalArgumentException("Студент уже в вашей группе");
-        }
-        student.setTeacher(teacher);
-        userRepo.save(student);
-    }
-
-    @Transactional
     public void removeFromGroup(Long studentId, String teacherUsername) {
         User teacher = requireTeacher(teacherUsername);
         User student = userRepo.findById(studentId)
@@ -113,7 +107,7 @@ public class StudentProgressService {
             throw new IllegalArgumentException("Студент не в вашей группе");
         }
         student.setTeacher(null);
-        userRepo.save(student);
+        student.setStudyGroup(null);
     }
 
     private User requireTeacher(String username) {

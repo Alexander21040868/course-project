@@ -33,11 +33,12 @@ public class AuthService {
             throw new IllegalArgumentException("Email уже используется");
         }
 
+        Role role = parseRole(req.role());
         User user = new User(
                 req.username(),
                 req.email() != null ? req.email() : req.username() + "@codequest.local",
                 encoder.encode(req.password()),
-                Role.STUDENT
+                role
         );
         userRepo.save(user);
         log.info("New user registered: {}", user.getUsername());
@@ -61,5 +62,13 @@ public class AuthService {
         log.info("User '{}' logged in", user.getUsername());
         String token = jwtService.generateToken(user.getUsername(), user.getRole().name());
         return new AuthResponse(token, user.getUsername(), user.getRole().name());
+    }
+
+    private Role parseRole(String raw) {
+        if (raw == null || raw.isBlank()) return Role.STUDENT;
+        String normalized = raw.trim().toUpperCase();
+        if ("TEACHER".equals(normalized)) return Role.TEACHER;
+        if ("STUDENT".equals(normalized)) return Role.STUDENT;
+        throw new IllegalArgumentException("Недопустимая роль");
     }
 }

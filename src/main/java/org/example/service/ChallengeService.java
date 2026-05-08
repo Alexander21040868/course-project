@@ -77,12 +77,16 @@ public class ChallengeService {
     public void join(Long challengeId, String username) {
         User user = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        Challenge ch = challengeRepo.findById(challengeId)
+                .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден"));
+        if (LocalDateTime.now().isAfter(ch.getEndTime())) {
+            throw new IllegalArgumentException("Челлендж уже завершён");
+        }
         if (participantRepo.existsByChallengeIdAndUserId(challengeId, user.getId()))
             throw new IllegalArgumentException("Вы уже участвуете");
 
         ChallengeParticipant cp = new ChallengeParticipant();
-        cp.setChallenge(challengeRepo.findById(challengeId)
-                .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден")));
+        cp.setChallenge(ch);
         cp.setUser(user);
         participantRepo.save(cp);
     }
@@ -153,8 +157,9 @@ public class ChallengeService {
         boolean joined = userId != null &&
                 participantRepo.existsByChallengeIdAndUserId(c.getId(), userId);
         boolean active = now.isAfter(c.getStartTime()) && now.isBefore(c.getEndTime());
+        boolean upcoming = now.isBefore(c.getStartTime());
         return new ChallengeDto(c.getId(), c.getTitle(), c.getDescription(),
                 c.getStartTime(), c.getEndTime(), c.getBonusXp(),
-                c.getCreatedBy().getUsername(), c.getTasks().size(), joined, active);
+                c.getCreatedBy().getUsername(), c.getTasks().size(), joined, active, upcoming);
     }
 }

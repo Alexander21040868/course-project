@@ -226,6 +226,33 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
+        .role-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .role-pick {
+            padding: 14px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-dim);
+            font-family: var(--mono);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            line-height: 1.4;
+        }
+        .role-pick:hover { border-color: var(--text-dim); color: var(--text); }
+        .role-pick.active {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: rgba(0,229,255,.06);
+            box-shadow: 0 0 0 3px rgba(0,229,255,.08);
+        }
+        .role-pick small { display: block; font-size: 10px; margin-top: 4px; opacity: 0.7; }
+
         .version-tag {
             text-align: center;
             margin-top: 20px;
@@ -285,12 +312,21 @@
                         <label>Пароль</label>
                         <input type="password" name="password" placeholder="••••••••" required autocomplete="new-password">
                     </div>
+                    <div class="form-group">
+                        <label>Роль</label>
+                        <div class="role-grid" id="roleGrid">
+                            <div class="role-pick active" data-role="STUDENT">
+                                Ученик<small>учусь</small>
+                            </div>
+                            <div class="role-pick" data-role="TEACHER">
+                                Учитель<small>преподаю</small>
+                            </div>
+                        </div>
+                    </div>
                     <button type="submit" class="btn btn-primary">✦ Создать персонажа</button>
                 </form>
             </div>
         </div>
-
-        <div class="version-tag">v1.0 — Spring 2026</div>
     </div>
 
     <script>
@@ -347,13 +383,23 @@
             authRequest('login', { username: f.get('username'), password: f.get('password') });
         });
 
+        let selectedRole = 'STUDENT';
+        document.querySelectorAll('#roleGrid .role-pick').forEach(el => {
+            el.addEventListener('click', () => {
+                document.querySelectorAll('#roleGrid .role-pick').forEach(x => x.classList.remove('active'));
+                el.classList.add('active');
+                selectedRole = el.dataset.role;
+            });
+        });
+
         document.getElementById('registerForm').addEventListener('submit', e => {
             e.preventDefault();
             const f = new FormData(e.target);
             authRequest('register', {
                 username: f.get('username'),
                 email: f.get('email'),
-                password: f.get('password')
+                password: f.get('password'),
+                role: selectedRole
             });
         });
     </script>

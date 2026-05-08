@@ -227,14 +227,32 @@
                 </div>
                 <div class="admin-panel" id="atab-students">
                     <div class="admin-section">
+                        <h3>📚 Подгруппы</h3>
+                        <p class="admin-edit-hint">Делите своих учеников на подгруппы (классы, потоки). Учеников можно перемещать между ними.</p>
+                        <div class="group-search-row">
+                            <input type="text" id="newGroupName" placeholder="Название подгруппы (например, «Пн-10А»)" autocomplete="off">
+                            <button type="button" class="btn-admin" id="createGroupBtn">Создать</button>
+                        </div>
+                        <div id="groupsGrid" class="groups-grid"></div>
+                    </div>
+                    <div class="admin-section">
                         <h3>👥 Моя группа</h3>
-                        <p class="admin-edit-hint">Здесь видны только ваши студенты. Чтобы добавить кого-то в группу, найдите его ниже по имени.</p>
+                        <p class="admin-edit-hint">Здесь видны только ваши ученики. Можно перемещать их между подгруппами или удалить из вашей группы.</p>
+                        <div class="group-search-row">
+                            <select id="groupFilter">
+                                <option value="">Все подгруппы</option>
+                            </select>
+                        </div>
                         <div id="myGroupTable"></div>
                     </div>
                     <div class="admin-section">
-                        <h3>➕ Добавить ученика в группу</h3>
+                        <h3>➕ Пригласить ученика в группу</h3>
+                        <p class="admin-edit-hint">Ученик получит уведомление и сможет принять или отклонить приглашение.</p>
                         <div class="group-search-row">
                             <input type="text" id="studentSearch" placeholder="Имя ученика (можно часть)" autocomplete="off">
+                            <select id="inviteGroupSelect">
+                                <option value="">Без подгруппы</option>
+                            </select>
                             <button type="button" class="btn-admin btn-admin-ghost" id="studentSearchBtn">Найти</button>
                         </div>
                         <div id="studentSearchResults"></div>
