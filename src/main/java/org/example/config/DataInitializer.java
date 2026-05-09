@@ -10,18 +10,10 @@ import org.springframework.stereotype.Component;
 public class DataInitializer implements CommandLineRunner {
 
     private final UserRepository userRepo;
-    private final LessonRepository lessonRepo;
-    private final TaskRepository taskRepo;
-    private final TestCaseRepository testCaseRepo;
     private final PasswordEncoder encoder;
 
-    public DataInitializer(UserRepository userRepo, LessonRepository lessonRepo,
-                           TaskRepository taskRepo, TestCaseRepository testCaseRepo,
-                           PasswordEncoder encoder) {
+    public DataInitializer(UserRepository userRepo, PasswordEncoder encoder) {
         this.userRepo = userRepo;
-        this.lessonRepo = lessonRepo;
-        this.taskRepo = taskRepo;
-        this.testCaseRepo = testCaseRepo;
         this.encoder = encoder;
     }
 
@@ -247,42 +239,4 @@ public class DataInitializer implements CommandLineRunner {
 //            new String[]{null, "Bob", "true"});
     }
 
-    @SuppressWarnings("unused")
-    private Lesson lesson(User author, int order, String title, String desc, String content) {
-        Lesson l = new Lesson();
-        l.setTitle(title);
-        l.setDescription(desc);
-        l.setContent(content);
-        l.setOrderIndex(order);
-        l.setAuthor(author);
-        return lessonRepo.save(l);
-    }
-
-    @SuppressWarnings("unused")
-    private void task(Lesson lesson, int order, String title, String desc,
-                      Difficulty diff, int xp, String template, String expected,
-                      String hints, String[]... tests) {
-        Task t = new Task();
-        t.setLesson(lesson);
-        t.setTitle(title);
-        t.setDescription(desc);
-        t.setDifficulty(diff);
-        t.setXpReward(xp);
-        t.setTemplateCode(template);
-        t.setExpectedOutput(expected);
-        t.setHints(hints);
-        t.setOrderIndex(order);
-        taskRepo.save(t);
-
-        int idx = 0;
-        for (String[] tc : tests) {
-            TestCase testCase = new TestCase();
-            testCase.setTask(t);
-            testCase.setInput(tc[0]);
-            testCase.setExpectedOutput(tc[1]);
-            testCase.setSample("true".equals(tc[2]));
-            testCase.setOrderIndex(idx++);
-            testCaseRepo.save(testCase);
-        }
-    }
 }

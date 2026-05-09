@@ -61,9 +61,23 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("attachedTaskIds", attached));
     }
 
+    @DeleteMapping("/lessons/{id}/tasks/{taskId}")
+    public ResponseEntity<Void> detachTaskFromLesson(@PathVariable("id") Long id,
+                                                     @PathVariable("taskId") Long taskId,
+                                                     Principal principal) {
+        lessonService.detachTask(id, taskId, principal.getName());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/lessons/by-order/{orderIndex}")
+    public ResponseEntity<LessonDto> getMyLessonByOrder(@PathVariable("orderIndex") int orderIndex,
+                                                        Principal principal) {
+        return ResponseEntity.ok(lessonService.findByOrderForTeacher(orderIndex, principal.getName()));
+    }
+
     @PostMapping("/tasks")
-    public ResponseEntity<TaskDto> createTask(@Valid @RequestBody TaskCreateRequest req) {
-        return ResponseEntity.ok(taskService.create(req));
+    public ResponseEntity<TaskDto> createTask(@Valid @RequestBody TaskCreateRequest req, Principal principal) {
+        return ResponseEntity.ok(taskService.create(req, principal.getName()));
     }
 
     @GetMapping("/tasks/{id}")

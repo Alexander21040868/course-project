@@ -19,6 +19,8 @@ public class GamificationService {
     private final UserAchievementRepository userAchievementRepo;
     private final SubmissionRepository submissionRepo;
     private final TaskRepository taskRepo;
+    private final LessonRepository lessonRepo;
+    private final LessonTaskRepository lessonTaskRepo;
     private final NotificationService notificationService;
 
     public GamificationService(UserRepository userRepo,
@@ -26,12 +28,16 @@ public class GamificationService {
                                UserAchievementRepository userAchievementRepo,
                                SubmissionRepository submissionRepo,
                                TaskRepository taskRepo,
+                               LessonRepository lessonRepo,
+                               LessonTaskRepository lessonTaskRepo,
                                NotificationService notificationService) {
         this.userRepo = userRepo;
         this.achievementRepo = achievementRepo;
         this.userAchievementRepo = userAchievementRepo;
         this.submissionRepo = submissionRepo;
         this.taskRepo = taskRepo;
+        this.lessonRepo = lessonRepo;
+        this.lessonTaskRepo = lessonTaskRepo;
         this.notificationService = notificationService;
     }
 
@@ -69,12 +75,12 @@ public class GamificationService {
     }
 
     private boolean hasAnyLessonCleared(Long userId) {
-        var lessons = taskRepo.findAllByOrderByIdAsc().stream()
-                .collect(java.util.stream.Collectors.groupingBy(t -> t.getLesson().getId()));
-        for (var entry : lessons.entrySet()) {
-            boolean allSolved = entry.getValue().stream()
-                    .allMatch(t -> submissionRepo.existsByUserIdAndTaskIdAndStatus(userId, t.getId(), SubmissionStatus.CORRECT));
-            if (allSolved && !entry.getValue().isEmpty()) return true;
+        for (Lesson lesson : lessonRepo.findAll()) {
+            var links = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId());
+            if (links.isEmpty()) continue;
+            boolean allSolved = links.stream().allMatch(lt ->
+                    submissionRepo.existsByUserIdAndTaskIdAndStatus(userId, lt.getTask().getId(), SubmissionStatus.CORRECT));
+            if (allSolved) return true;
         }
         return false;
     }

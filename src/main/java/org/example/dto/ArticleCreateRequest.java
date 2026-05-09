@@ -6,5 +6,5 @@ public record ArticleCreateRequest(
         @NotBlank String title,
         @NotBlank String content,
         String category,
-        int orderIndex
+        Integer orderIndex
 ) {}

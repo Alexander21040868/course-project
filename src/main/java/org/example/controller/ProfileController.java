@@ -20,15 +20,18 @@ public class ProfileController {
     private final SubmissionRepository submissionRepo;
     private final LessonRepository lessonRepo;
     private final TaskRepository taskRepo;
+    private final LessonTaskRepository lessonTaskRepo;
     private final GamificationService gamificationService;
 
     public ProfileController(UserRepository userRepo, SubmissionRepository submissionRepo,
                              LessonRepository lessonRepo, TaskRepository taskRepo,
+                             LessonTaskRepository lessonTaskRepo,
                              GamificationService gamificationService) {
         this.userRepo = userRepo;
         this.submissionRepo = submissionRepo;
         this.lessonRepo = lessonRepo;
         this.taskRepo = taskRepo;
+        this.lessonTaskRepo = lessonTaskRepo;
         this.gamificationService = gamificationService;
     }
 
@@ -42,9 +45,19 @@ public class ProfileController {
         long totalTasks = taskRepo.count();
         List<AchievementDto> achievements = gamificationService.getUserAchievements(user.getId());
 
-        List<LessonProgressDto> lessonsProgress = lessonRepo.findAllByOrderByOrderIndexAsc().stream()
+        List<Lesson> visibleLessons;
+        if (user.getRole() == Role.TEACHER) {
+            visibleLessons = lessonRepo.findByAuthorIdOrderByOrderIndexAsc(user.getId());
+        } else if (user.getTeacher() != null) {
+            visibleLessons = lessonRepo.findByAuthorIdOrderByOrderIndexAsc(user.getTeacher().getId());
+        } else {
+            visibleLessons = List.of();
+        }
+
+        List<LessonProgressDto> lessonsProgress = visibleLessons.stream()
                 .map(lesson -> {
-                    List<Task> tasks = taskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId());
+                    List<Task> tasks = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId()).stream()
+                            .map(LessonTask::getTask).toList();
                     List<TaskProgressDto> taskProgress = tasks.stream().map(t -> {
                         boolean solved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
                                 user.getId(), t.getId(), SubmissionStatus.CORRECT);

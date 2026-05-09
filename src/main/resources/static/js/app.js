@@ -94,6 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('active');
         $('atab-' + btn.dataset.atab).classList.add('active');
         if (btn.dataset.atab === 'students') loadGroup();
+        if (btn.dataset.atab === 'content') loadMyLessonsIndex();
     }));
 
     let catalogTimer;
@@ -386,7 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="task-info">
                         <h4>${esc(t.title)}</h4>
                         <span class="task-diff diff-${t.difficulty.toLowerCase()}">${diffLabel(t.difficulty)}</span>
-                        <span class="task-lesson-tag">${esc(t.lessonTitle)}</span>
+                        ${t.authorUsername ? `<span class="task-author-tag">автор: ${esc(t.authorUsername)}</span>` : ''}
                     </div>
                     <span class="task-xp">+${t.xpReward} XP</span>
                 </div>`).join('');
@@ -464,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             el.innerHTML = lessons.map(l => `
                 <div class="quest-card" data-id="${l.id}">
-                    <div class="quest-order">ПОДЗЕМЕЛЬЕ #${l.orderIndex + 1}</div>
+                    <div class="quest-order">ПОДЗЕМЕЛЬЕ #${l.orderIndex}<span class="quest-id">id ${l.id}</span></div>
                     <h3>${esc(l.title)}</h3>
                     <p>${esc(l.description || '')}</p>
                     <div class="quest-meta"><span>⚔ ${l.taskCount} задач</span></div>
@@ -531,6 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
             $('taskDiff').textContent = diffLabel(t.difficulty);
             $('taskDiff').className = 'task-diff diff-' + t.difficulty.toLowerCase();
             $('taskXp').textContent = '+' + t.xpReward + ' XP';
+            $('taskAuthor').textContent = t.authorUsername ? 'автор: ' + t.authorUsername : '';
             $('taskDesc').innerHTML = t.description || '';
 
             if (t.hints) { $('hintBox').style.display = ''; $('hintText').textContent = t.hints; }
@@ -632,10 +634,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const chs = await API.get('/challenges');
             if (!chs.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚔</div><p>Нет активных челленджей.</p></div>'; return; }
             el.innerHTML = chs.map(c => {
-                const remainingH = Math.max(0, Math.floor((new Date(c.endTime) - Date.now()) / 3600000));
-                const tillStartH = Math.max(0, Math.floor((new Date(c.startTime) - Date.now()) / 3600000));
-                const status = c.active ? `⏱ Идёт • ${remainingH}ч осталось`
-                    : c.upcoming ? `🕒 Старт через ${tillStartH}ч`
+                const status = c.active ? `⏱ Идёт • до ${formatMsk(c.endTime)} МСК`
+                    : c.upcoming ? `🕒 Старт ${formatMsk(c.startTime)} МСК`
                     : '🏁 Завершён';
                 const cardClass = c.active ? 'active' : c.upcoming ? 'upcoming' : 'ended';
                 const canJoin = (c.active || c.upcoming) && !c.joined;
@@ -753,8 +753,11 @@ document.addEventListener('DOMContentLoaded', () => {
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
             const filter = $('groupFilter')?.value || '';
+            const nameQuery = ($('groupNameSearch')?.value || '').trim().toLowerCase();
             const all = await API.get('/admin/students');
-            const students = filter ? all.filter(s => String(s.groupId || '') === filter) : all;
+            const students = all
+                .filter(s => !filter || String(s.groupId || '') === filter)
+                .filter(s => !nameQuery || s.username.toLowerCase().includes(nameQuery));
             if (!students.length) {
                 el.innerHTML = '<div class="empty-row">В выбранной подгруппе нет учеников.</div>';
                 return;
@@ -858,6 +861,32 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     $('groupFilter')?.addEventListener('change', renderMyGroup);
+    let groupNameSearchTimer;
+    $('groupNameSearch')?.addEventListener('input', () => {
+        clearTimeout(groupNameSearchTimer);
+        groupNameSearchTimer = setTimeout(renderMyGroup, 200);
+    });
+
+    async function loadMyLessonsIndex() {
+        const el = $('myLessonsIndex');
+        if (!el) return;
+        try {
+            const data = await API.get('/lessons?page=0&size=100');
+            const lessons = data.content ?? data ?? [];
+            if (!lessons.length) { el.innerHTML = ''; return; }
+            el.innerHTML = '<h4>Ваши подземелья</h4>' + lessons.map(l => `
+                <div class="lesson-index-row">
+                    <span class="li-id">id ${l.id}</span>
+                    <span class="li-title">${esc(l.title)}</span>
+                    <span class="li-order">порядок ${l.orderIndex}</span>
+                    <button type="button" class="btn-admin btn-admin-ghost" data-edit-lesson="${l.id}">Редактировать</button>
+                </div>`).join('');
+            el.querySelectorAll('[data-edit-lesson]').forEach(b => b.addEventListener('click', () => {
+                $('loadLessonId').value = String(b.dataset.editLesson);
+                $('loadLessonBtn').click();
+            }));
+        } catch (e) { el.innerHTML = ''; }
+    }
 
     const taskExampleRowHtml = () => `
         <div class="admin-example-row">
@@ -938,10 +967,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('loadLessonBtn')?.addEventListener('click', async () => {
-        const id = +$('loadLessonId').value;
-        if (!id) { alert('Введите id урока (число).'); return; }
+        const order = +$('loadLessonOrder').value;
+        if (!order) { alert('Введите номер подземелья.'); return; }
         try {
-            const d = await API.get('/lessons/' + id);
+            const d = await API.get('/admin/lessons/by-order/' + order);
             const f = $('createLessonForm');
             setFormField(f, 'title', d.title);
             setFormField(f, 'description', d.description);
@@ -955,7 +984,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('clearLessonEditBtn')?.addEventListener('click', () => {
         $('createLessonForm').reset();
         $('editLessonId').value = '';
-        $('loadLessonId').value = '';
+        $('loadLessonOrder').value = '';
         $('lessonFormSubmitBtn').textContent = 'Создать урок';
     });
 
@@ -965,15 +994,12 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const d = await API.get('/admin/tasks/' + id);
             const f = $('createTaskForm');
-            setFormField(f, 'lessonId', d.lessonId);
             setFormField(f, 'title', d.title);
             setFormField(f, 'description', d.description);
             setFormField(f, 'difficulty', d.difficulty);
             setFormField(f, 'xpReward', d.xpReward);
             setFormField(f, 'templateCode', d.templateCode);
-            setFormField(f, 'expectedOutput', d.expectedOutput);
             setFormField(f, 'hints', d.hints);
-            setFormField(f, 'orderIndex', d.orderIndex ?? 0);
             renderTaskExamplesFromApi(d.examples);
             $('editTaskId').value = String(d.id);
             $('taskFormSubmitBtn').textContent = 'Сохранить задачу';
@@ -996,7 +1022,6 @@ document.addEventListener('DOMContentLoaded', () => {
             setFormField(f, 'title', d.title);
             setFormField(f, 'category', d.category);
             $('articleContent').value = d.content || '';
-            setFormField(f, 'orderIndex', d.orderIndex ?? 0);
             $('editArticleId').value = String(d.id);
             $('articleFormSubmitBtn').textContent = 'Сохранить статью';
             syncArticlePreview();
@@ -1035,32 +1060,58 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lid) {
                 if (saved && saved.id != null) $('editLessonId').value = String(saved.id);
                 $('lessonFormSubmitBtn').textContent = 'Сохранить урок';
-                if (saved?.id != null) $('loadLessonId').value = String(saved.id);
+                if (saved?.orderIndex != null) $('loadLessonOrder').value = String(saved.orderIndex);
             } else {
                 e.target.reset();
                 $('editLessonId').value = '';
                 $('lessonFormSubmitBtn').textContent = 'Создать урок';
-                if (saved?.id != null) $('loadLessonId').value = String(saved.id);
+                if (saved?.orderIndex != null) $('loadLessonOrder').value = String(saved.orderIndex);
             }
             const detail = taskIds.length ? `Прикреплено задач: ${taskIds.length}` : '';
             showToast('📖', lid ? 'Урок сохранён' : 'Урок создан', detail);
+            loadMyLessonsIndex();
         } catch (err) { alert(err.message); }
     });
+
+    async function resolveLessonByOrder(order) {
+        const l = await API.get('/admin/lessons/by-order/' + order);
+        return l;
+    }
 
     $('attachTasksForm')?.addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(e.target);
-        const lessonId = +fd.get('lessonId');
+        const order = +fd.get('lessonOrder');
         const taskIds = parseIdList(fd.get('taskIds'));
-        if (!lessonId || !taskIds.length) {
-            alert('Укажите id урока и хотя бы один id задачи.');
+        if (!order || !taskIds.length) {
+            alert('Укажите номер подземелья и хотя бы один id задачи.');
             return;
         }
         try {
-            const r = await API.post('/admin/lessons/' + lessonId + '/tasks', { taskIds });
+            const lesson = await resolveLessonByOrder(order);
+            const r = await API.post('/admin/lessons/' + lesson.id + '/tasks', { taskIds });
             const n = (r && r.attachedTaskIds && r.attachedTaskIds.length) || taskIds.length;
-            showToast('🔗', 'Задачи прикреплены', `Урок #${lessonId}: ${n} задач(и)`);
+            showToast('🔗', 'Задачи прикреплены', `Подземелье №${order}: ${n} задач(и)`);
             e.target.reset();
+        } catch (err) { alert(err.message); }
+    });
+
+    $('detachTasksBtn')?.addEventListener('click', async () => {
+        const f = $('attachTasksForm');
+        const fd = new FormData(f);
+        const order = +fd.get('lessonOrder');
+        const taskIds = parseIdList(fd.get('taskIds'));
+        if (!order || !taskIds.length) {
+            alert('Укажите номер подземелья и хотя бы один id задачи.');
+            return;
+        }
+        try {
+            const lesson = await resolveLessonByOrder(order);
+            for (const tid of taskIds) {
+                await API.delete('/admin/lessons/' + lesson.id + '/tasks/' + tid);
+            }
+            showToast('🪶', 'Задачи откреплены', `Подземелье №${order}: ${taskIds.length}`);
+            f.reset();
         } catch (err) { alert(err.message); }
     });
     $('createTaskForm').addEventListener('submit', async e => {
@@ -1068,15 +1119,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const fd = new FormData(e.target);
         const testCases = collectTaskExamplesForApi();
         const body = {
-            lessonId: +fd.get('lessonId'),
             title: fd.get('title'),
             description: fd.get('description'),
             difficulty: fd.get('difficulty'),
             xpReward: +fd.get('xpReward'),
             templateCode: fd.get('templateCode'),
-            expectedOutput: (fd.get('expectedOutput') || '').trim(),
             hints: fd.get('hints'),
-            orderIndex: +fd.get('orderIndex'),
             testCases: testCases.length ? testCases : null
         };
         const tid = $('editTaskId').value;
@@ -1110,13 +1158,10 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const fd = new FormData(e.target);
         const ta = $('articleContent');
-        const oiRaw = fd.get('orderIndex');
-        const oiNum = oiRaw === '' || oiRaw == null ? NaN : Number(oiRaw);
         const body = {
             title: (fd.get('title') || '').trim(),
             content: (ta ? ta.value : fd.get('content')) || '',
-            category: (fd.get('category') || '').trim() || 'Справочник',
-            orderIndex: Number.isFinite(oiNum) ? oiNum : 0
+            category: (fd.get('category') || '').trim() || 'Справочник'
         };
         const aid = $('editArticleId').value;
         try {
@@ -1142,6 +1187,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function diffLabel(d) { return { EASY:'🟢 Лёгкая', MEDIUM:'🟡 Средняя', HARD:'🔴 Сложная' }[d] || d; }
     function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function formatMsk(iso) {
+        if (!iso) return '';
+        const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+        if (!m) return iso;
+        return `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}`;
+    }
     function mdFromApi(s) {
         if (!s) return '';
         return s.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').replace(/\\r/g, '\r');

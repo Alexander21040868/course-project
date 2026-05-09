@@ -79,7 +79,7 @@
             <div class="view" id="view-task">
                 <button class="back-btn" id="backToLesson">← Назад к уроку</button>
                 <div class="task-header">
-                    <div><h2 id="taskTitle"></h2><span class="task-diff" id="taskDiff"></span></div>
+                    <div><h2 id="taskTitle"></h2><span class="task-diff" id="taskDiff"></span><span class="task-author" id="taskAuthor"></span></div>
                     <span class="task-xp" id="taskXp"></span>
                 </div>
                 <div class="task-desc" id="taskDesc"></div>
@@ -158,7 +158,6 @@
                                     <div id="articleMdPreview" class="article-md-preview md-content" tabindex="-1" title="Редактирование только в поле Markdown слева"></div>
                                 </div>
                             </div>
-                            <div><label>Порядок</label><input type="number" name="orderIndex" value="0"></div>
                             <button type="submit" class="btn-admin" id="articleFormSubmitBtn">Опубликовать</button>
                         </form>
                         <input type="hidden" id="editArticleId" value="" autocomplete="off">
@@ -168,8 +167,8 @@
                         <form class="admin-form" id="createLessonForm">
                             <p class="admin-edit-hint">Правка урока: id и «Подставить в форму», затем «Сохранить». «Новый урок» — сброс.</p>
                             <div class="admin-edit-bar">
-                                <label>Id урока</label>
-                                <input type="number" id="loadLessonId" min="1" placeholder="существующий">
+                                <label>Номер подземелья</label>
+                                <input type="number" id="loadLessonOrder" min="1" placeholder="например: 5">
                                 <button type="button" class="btn-admin btn-admin-ghost" id="loadLessonBtn">Подставить в форму</button>
                                 <button type="button" class="btn-admin btn-admin-ghost" id="clearLessonEditBtn">Новый урок</button>
                             </div>
@@ -185,14 +184,18 @@
                             <button type="submit" class="btn-admin" id="lessonFormSubmitBtn">Создать урок</button>
                         </form>
                         <input type="hidden" id="editLessonId" value="" autocomplete="off">
+                        <div class="lesson-index" id="myLessonsIndex"></div>
                     </div>
                     <div class="admin-section">
-                        <h3>🔗 Добавить задачи в существующий урок</h3>
-                        <p class="admin-edit-hint">Удобно, если задачи уже созданы и нужно собрать их в урок. Введите id урока и id задач — задачи переместятся в этот урок.</p>
+                        <h3>🔗 Прикрепить или открепить задачи</h3>
+                        <p class="admin-edit-hint">Введите номер подземелья и id задач. Прикрепление не отнимает задачу у других уроков — каждая задача может быть в нескольких подземельях.</p>
                         <form class="admin-form" id="attachTasksForm">
-                            <div><label>Id урока</label><input type="number" name="lessonId" min="1" required placeholder="например: 3"></div>
+                            <div><label>Номер подземелья</label><input type="number" name="lessonOrder" min="1" required placeholder="например: 3"></div>
                             <div><label>Id задач (через запятую)</label><input type="text" name="taskIds" required placeholder="2, 5, 8"></div>
-                            <button type="submit" class="btn-admin">Прикрепить</button>
+                            <div class="attach-actions">
+                                <button type="submit" class="btn-admin" data-action="attach">Прикрепить</button>
+                                <button type="button" class="btn-admin btn-admin-ghost" id="detachTasksBtn">Открепить</button>
+                            </div>
                         </form>
                     </div>
                     <div class="admin-section">
@@ -205,7 +208,6 @@
                                 <button type="button" class="btn-admin btn-admin-ghost" id="loadTaskBtn">Подставить в форму</button>
                                 <button type="button" class="btn-admin btn-admin-ghost" id="clearTaskEditBtn">Новая задача</button>
                             </div>
-                            <div><label>ID Урока</label><input type="number" name="lessonId" required placeholder="1"></div>
                             <div><label>Название</label><input type="text" name="title" required placeholder="Hello World"></div>
                             <div><label>Описание</label><textarea name="description" placeholder="Описание..."></textarea></div>
                             <div><label>Сложность</label><select name="difficulty"><option value="EASY">Лёгкая</option><option value="MEDIUM">Средняя</option><option value="HARD">Сложная</option></select></div>
@@ -217,9 +219,7 @@
                                 <div id="taskExamples"></div>
                                 <button type="button" class="btn-admin btn-tc-add" id="addExampleBtn">+ пример</button>
                             </div>
-                            <div><label>Эталонный вывод без примеров выше</label><textarea name="expectedOutput" rows="4" placeholder="Если примеров нет — сравнение только с этим текстом (можно несколько строк)"></textarea></div>
                             <div><label>Подсказка</label><input type="text" name="hints" placeholder="Используйте printf()"></div>
-                            <div><label>Порядковый номер</label><input type="number" name="orderIndex" value="0"></div>
                             <button type="submit" class="btn-admin" id="taskFormSubmitBtn">Создать задачу</button>
                         </form>
                         <input type="hidden" id="editTaskId" value="" autocomplete="off">
@@ -237,8 +237,9 @@
                     </div>
                     <div class="admin-section">
                         <h3>👥 Моя группа</h3>
-                        <p class="admin-edit-hint">Здесь видны только ваши ученики. Можно перемещать их между подгруппами или удалить из вашей группы.</p>
+                        <p class="admin-edit-hint">Здесь видны только ваши ученики. Можно фильтровать по подгруппе и искать по имени.</p>
                         <div class="group-search-row">
+                            <input type="text" id="groupNameSearch" placeholder="Поиск ученика по имени" autocomplete="off">
                             <select id="groupFilter">
                                 <option value="">Все подгруппы</option>
                             </select>

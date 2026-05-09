@@ -17,15 +17,17 @@ public class StudentProgressService {
     private final LessonRepository lessonRepo;
     private final SubmissionRepository submissionRepo;
     private final GroupInviteRepository inviteRepo;
+    private final LessonTaskRepository lessonTaskRepo;
 
     public StudentProgressService(UserRepository userRepo, TaskRepository taskRepo,
                                   LessonRepository lessonRepo, SubmissionRepository submissionRepo,
-                                  GroupInviteRepository inviteRepo) {
+                                  GroupInviteRepository inviteRepo, LessonTaskRepository lessonTaskRepo) {
         this.userRepo = userRepo;
         this.taskRepo = taskRepo;
         this.lessonRepo = lessonRepo;
         this.submissionRepo = submissionRepo;
         this.inviteRepo = inviteRepo;
+        this.lessonTaskRepo = lessonTaskRepo;
     }
 
     public List<StudentProgressDto> listGroup(String teacherUsername) {
@@ -77,9 +79,10 @@ public class StudentProgressService {
         long totalSolved = submissionRepo.countDistinctTaskByUserIdAndStatus(
                 user.getId(), SubmissionStatus.CORRECT);
 
-        List<LessonProgressDto> lessons = lessonRepo.findAllByOrderByOrderIndexAsc().stream()
+        List<LessonProgressDto> lessons = lessonRepo.findByAuthorIdOrderByOrderIndexAsc(teacher.getId()).stream()
                 .map(lesson -> {
-                    List<Task> tasks = taskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId());
+                    List<Task> tasks = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId()).stream()
+                            .map(LessonTask::getTask).toList();
                     List<TaskProgressDto> taskProgress = tasks.stream().map(t -> {
                         boolean solved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
                                 user.getId(), t.getId(), SubmissionStatus.CORRECT);

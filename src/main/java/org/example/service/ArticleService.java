@@ -71,7 +71,7 @@ public class ArticleService {
         a.setTitle(req.title().trim());
         a.setContent(req.content());
         a.setCategory(req.category() != null && !req.category().isBlank() ? req.category().trim() : "Справочник");
-        a.setOrderIndex(req.orderIndex());
+        a.setOrderIndex(req.orderIndex() != null ? req.orderIndex() : nextOrderIndex());
         a.setAuthor(author);
         Article saved = articleRepo.save(a);
         log.info("Статья создана: id={} «{}»", saved.getId(), saved.getTitle());
@@ -85,9 +85,14 @@ public class ArticleService {
         a.setTitle(req.title().trim());
         a.setContent(req.content());
         a.setCategory(req.category() != null && !req.category().isBlank() ? req.category().trim() : "Справочник");
-        a.setOrderIndex(req.orderIndex());
+        if (req.orderIndex() != null) a.setOrderIndex(req.orderIndex());
         log.info("Статья обновлена: id={}", id);
         return toDto(articleRepo.save(a));
+    }
+
+    private int nextOrderIndex() {
+        return articleRepo.findAllByOrderByOrderIndexAsc().stream()
+                .mapToInt(Article::getOrderIndex).max().orElse(0) + 1;
     }
 
     @Transactional(readOnly = false)

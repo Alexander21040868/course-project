@@ -143,8 +143,8 @@ public class SubmissionService {
             return new TestEval(false, "Нужен непустой код с функцией main.");
         }
 
-        String expected = normalizeExpected(expectedRaw);
-        String stdin = tc.getInput() == null ? "" : tc.getInput();
+        String expected = normalizeText(expectedRaw);
+        String stdin = ensureTrailingNewline(normalizeText(tc.getInput()));
         CExecutionResult r = cExec.compileAndRun(c, stdin);
         return mapExecutionToEval(r, expected);
     }
@@ -159,7 +159,7 @@ public class SubmissionService {
             return new TestEval(false, "Нужен непустой код с функцией main.");
         }
 
-        String expected = normalizeExpected(expectedRaw);
+        String expected = normalizeText(expectedRaw);
         CExecutionResult r = cExec.compileAndRun(c, "");
         return mapExecutionToEval(r, expected);
     }
@@ -183,8 +183,19 @@ public class SubmissionService {
         };
     }
 
-    private static String normalizeExpected(String s) {
-        return s.replace("\\n", "\n").replace("\\t", "\t");
+    private static String normalizeText(String s) {
+        if (s == null) return "";
+        return s
+                .replace("\\r\\n", "\n")
+                .replace("\\n", "\n")
+                .replace("\\t", "\t")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
+    }
+
+    private static String ensureTrailingNewline(String s) {
+        if (s.isEmpty()) return s;
+        return s.endsWith("\n") ? s : s + "\n";
     }
 
     private static String normalizeOut(String s) {

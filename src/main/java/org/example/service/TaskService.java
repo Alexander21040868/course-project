@@ -20,19 +20,21 @@ import java.util.Optional;
 public class TaskService {
 
     private final TaskRepository taskRepo;
-    private final LessonRepository lessonRepo;
     private final SubmissionRepository submissionRepo;
     private final UserRepository userRepo;
     private final TestCaseRepository testCaseRepo;
+    private final LessonTaskRepository lessonTaskRepo;
+    private final LessonRepository lessonRepo;
 
-    public TaskService(TaskRepository taskRepo, LessonRepository lessonRepo,
-                       SubmissionRepository submissionRepo, UserRepository userRepo,
-                       TestCaseRepository testCaseRepo) {
+    public TaskService(TaskRepository taskRepo, SubmissionRepository submissionRepo,
+                       UserRepository userRepo, TestCaseRepository testCaseRepo,
+                       LessonTaskRepository lessonTaskRepo, LessonRepository lessonRepo) {
         this.taskRepo = taskRepo;
-        this.lessonRepo = lessonRepo;
         this.submissionRepo = submissionRepo;
         this.userRepo = userRepo;
         this.testCaseRepo = testCaseRepo;
+        this.lessonTaskRepo = lessonTaskRepo;
+        this.lessonRepo = lessonRepo;
     }
 
     public Page<TaskDto> findPage(String search, String username, int page, int size) {
@@ -42,14 +44,10 @@ public class TaskService {
             String t = search.trim();
             Optional<Long> byId = parseNumericIdQuery(t);
             if (byId.isPresent()) {
-                if (page > 0) {
-                    return Page.<TaskDto>empty(p);
-                }
-                Optional<Task> task = taskRepo.findById(byId.get());
-                if (task.isEmpty()) {
-                    return Page.<TaskDto>empty(p);
-                }
-                return new PageImpl<>(List.of(toDto(task.get(), userId)), p, 1);
+                if (page > 0) return Page.<TaskDto>empty(p);
+                return taskRepo.findById(byId.get())
+                        .map(task -> (Page<TaskDto>) new PageImpl<>(List.of(toDto(task, userId)), p, 1))
+                        .orElseGet(() -> Page.<TaskDto>empty(p));
             }
             return taskRepo.findByTitleContainingIgnoreCaseOrderByIdAsc(t, p)
                     .map(task -> toDto(task, userId));
@@ -58,10 +56,7 @@ public class TaskService {
     }
 
     private static Optional<Long> parseNumericIdQuery(String trimmed) {
-
-        if (!trimmed.matches("#?\\d+")) {
-            return Optional.empty();
-        }
+        if (!trimmed.matches("#?\\d+")) return Optional.empty();
         try {
             return Optional.of(Long.parseLong(trimmed.replaceFirst("^#", "")));
         } catch (NumberFormatException e) {
@@ -70,9 +65,23 @@ public class TaskService {
     }
 
     public List<TaskDto> findByLesson(Long lessonId, String username) {
-        Long userId = resolveUserId(username);
-        return taskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId).stream()
-                .map(t -> toDto(t, userId)).toList();
+        Lesson lesson = lessonRepo.findById(lessonId)
+                .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+        User viewer = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        if (viewer.getRole() == Role.TEACHER) {
+            if (!lesson.getAuthor().getId().equals(viewer.getId())) {
+                throw new IllegalArgumentException("Этот урок создан другим учителем");
+            }
+        } else {
+            User teacher = viewer.getTeacher();
+            if (teacher == null || !lesson.getAuthor().getId().equals(teacher.getId())) {
+                throw new IllegalArgumentException("Урок недоступен: вы не прикреплены к его автору");
+            }
+        }
+        return lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId).stream()
+                .map(lt -> toDto(lt.getTask(), viewer.getId()))
+                .toList();
     }
 
     public TaskDto findById(Long id, String username) {
@@ -90,7 +99,6 @@ public class TaskService {
                 .toList();
         return new TaskEditDto(
                 t.getId(),
-                t.getLesson().getId(),
                 t.getTitle(),
                 t.getDescription(),
                 t.getDifficulty().name(),
@@ -98,18 +106,17 @@ public class TaskService {
                 t.getTemplateCode(),
                 t.getExpectedOutput(),
                 t.getHints(),
-                t.getOrderIndex(),
+                t.getAuthor() != null ? t.getAuthor().getUsername() : null,
                 examples
         );
     }
 
     @Transactional(readOnly = false)
-    public TaskDto create(TaskCreateRequest req) {
-        Lesson lesson = lessonRepo.findById(req.lessonId())
-                .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+    public TaskDto create(TaskCreateRequest req, String authorUsername) {
+        User author = userRepo.findByUsername(authorUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
 
         Task task = new Task();
-        task.setLesson(lesson);
         task.setTitle(req.title());
         task.setDescription(req.description());
         task.setDifficulty(req.difficulty() != null ? Difficulty.valueOf(req.difficulty()) : Difficulty.EASY);
@@ -117,7 +124,7 @@ public class TaskService {
         task.setTemplateCode(req.templateCode());
         task.setExpectedOutput(req.expectedOutput());
         task.setHints(req.hints());
-        task.setOrderIndex(req.orderIndex());
+        task.setAuthor(author);
         taskRepo.save(task);
 
         saveTestCases(task, req.testCases());
@@ -129,11 +136,6 @@ public class TaskService {
     public TaskDto update(Long id, TaskCreateRequest req) {
         Task task = taskRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
-        if (req.lessonId() != null) {
-            Lesson lesson = lessonRepo.findById(req.lessonId())
-                    .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
-            task.setLesson(lesson);
-        }
         task.setTitle(req.title());
         task.setDescription(req.description());
         if (req.difficulty() != null) task.setDifficulty(Difficulty.valueOf(req.difficulty()));
@@ -141,7 +143,6 @@ public class TaskService {
         task.setTemplateCode(req.templateCode());
         task.setExpectedOutput(req.expectedOutput());
         task.setHints(req.hints());
-        task.setOrderIndex(req.orderIndex());
         task = taskRepo.save(task);
 
         testCaseRepo.deleteByTaskId(id);
@@ -152,18 +153,15 @@ public class TaskService {
 
     @Transactional(readOnly = false)
     public void delete(Long id) {
+        lessonTaskRepo.deleteByTaskId(id);
         taskRepo.deleteById(id);
     }
 
     private void saveTestCases(Task task, List<TaskCreateRequest.TestCaseInput> cases) {
-        if (cases == null || cases.isEmpty()) {
-            return;
-        }
+        if (cases == null || cases.isEmpty()) return;
         int idx = 0;
         for (TaskCreateRequest.TestCaseInput tci : cases) {
-            if (tci.expectedOutput() == null || tci.expectedOutput().isBlank()) {
-                continue;
-            }
+            if (tci.expectedOutput() == null || tci.expectedOutput().isBlank()) continue;
             TestCase tc = new TestCase();
             tc.setTask(task);
             tc.setInput(tci.input() == null ? "" : tci.input());
@@ -190,10 +188,11 @@ public class TaskService {
                 .toList();
 
         return new TaskDto(
-                t.getId(), t.getLesson().getId(), t.getLesson().getTitle(),
-                t.getTitle(), t.getDescription(),
+                t.getId(), t.getTitle(), t.getDescription(),
                 t.getDifficulty().name(), t.getXpReward(), t.getTemplateCode(),
-                t.getHints(), t.getOrderIndex(), solved, sampleTests
+                t.getHints(),
+                t.getAuthor() != null ? t.getAuthor().getUsername() : null,
+                solved, sampleTests
         );
     }
 }

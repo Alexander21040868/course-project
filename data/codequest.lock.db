@@ -1,6 +1,6 @@
 #FileLock
-#Fri May 08 17:24:49 MSK 2026
+#Sat May 09 12:48:03 MSK 2026
 hostName=192.168.1.236
-id=19e07f9fc346ed42252449b5b6e2111b209549233d1
+id=19e0c22f68a548b9eab63f33788aacd6d0d37ae7525
 method=file
-server=192.168.1.236\:49496
+server=192.168.1.236\:51379

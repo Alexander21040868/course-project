@@ -4,7 +4,6 @@ import java.util.List;
 
 public record TaskEditDto(
         Long id,
-        Long lessonId,
         String title,
         String description,
         String difficulty,
@@ -12,6 +11,6 @@ public record TaskEditDto(
         String templateCode,
         String expectedOutput,
         String hints,
-        int orderIndex,
+        String authorUsername,
         List<TestCaseDto> examples
 ) {}

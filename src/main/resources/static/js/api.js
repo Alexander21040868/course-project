@@ -75,106 +75,34 @@ const API = {
         throw new Error(msg);
     },
 
-    _handleAuthError(err) {
-        if (err && err.error && err.error.includes('не найден')) {
-            this._failSession('Пользователь не найден. Войдите снова.');
+    _parseError(text) {
+        if (!text) return {};
+        try { return cqParseJsonBody(text); } catch { return {}; }
+    },
+
+    _checkAuth(status) {
+        if (status === 401 || status === 403) {
+            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
         }
     },
 
-    async get(path) {
-        const res = await fetch(this.base + path, { headers: this.headers() });
+    async _send(method, path, body) {
+        const init = { method, headers: this.headers() };
+        if (body !== undefined) init.body = JSON.stringify(body);
+        const res = await fetch(this.base + path, init);
         const text = await res.text();
-        if (res.status === 401 || res.status === 403) {
-            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
-        }
-        if (res.status === 404) {
-            let err = {};
-            try {
-                err = cqParseJsonBody(text);
-            } catch {
-                err = {};
-            }
-            throw new Error(err.error || 'Не найдено. Перезапустите приложение после mvn package.');
-        }
+        this._checkAuth(res.status);
         if (!res.ok) {
-            let err = {};
-            try {
-                err = cqParseJsonBody(text);
-            } catch {
-                err = {};
-            }
-            this._handleAuthError(err);
-            throw new Error(err.error || 'Ошибка запроса');
-        }
-        return cqParseJsonBody(text);
-    },
-
-    async post(path, body) {
-        const res = await fetch(this.base + path, {
-            method: 'POST',
-            headers: this.headers(),
-            body: JSON.stringify(body)
-        });
-        const text = await res.text();
-        if (res.status === 401 || res.status === 403) {
-            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
-        }
-        if (!res.ok) {
-            let err = {};
-            try {
-                err = cqParseJsonBody(text);
-            } catch {
-                err = {};
-            }
-            this._handleAuthError(err);
+            const err = this._parseError(text);
             throw new Error(err.error || 'Ошибка запроса');
         }
         return text.trim() ? cqParseJsonBody(text) : null;
     },
 
-    async put(path, body) {
-        const res = await fetch(this.base + path, {
-            method: 'PUT',
-            headers: this.headers(),
-            body: JSON.stringify(body)
-        });
-        const text = await res.text();
-        if (res.status === 401 || res.status === 403) {
-            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
-        }
-        if (!res.ok) {
-            let err = {};
-            try {
-                err = cqParseJsonBody(text);
-            } catch {
-                err = {};
-            }
-            this._handleAuthError(err);
-            throw new Error(err.error || 'Ошибка запроса');
-        }
-        return text.trim() ? cqParseJsonBody(text) : null;
-    },
-
-    async delete(path) {
-        const res = await fetch(this.base + path, {
-            method: 'DELETE',
-            headers: this.headers()
-        });
-        const text = await res.text();
-        if (res.status === 401 || res.status === 403) {
-            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
-        }
-        if (!res.ok) {
-            let err = {};
-            try {
-                err = text ? cqParseJsonBody(text) : {};
-            } catch {
-                err = {};
-            }
-            this._handleAuthError(err);
-            throw new Error(err.error || 'Ошибка удаления');
-        }
-    },
+    get(path) { return this._send('GET', path); },
+    post(path, body) { return this._send('POST', path, body ?? {}); },
+    put(path, body) { return this._send('PUT', path, body ?? {}); },
+    delete(path) { return this._send('DELETE', path); },
 
     async getBlob(path) {
         const h = {};

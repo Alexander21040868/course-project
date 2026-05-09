@@ -302,8 +302,9 @@ image.png
     border-radius: 10px;
     box-shadow: 0 12px 40px rgba(0,0,0,.35);
     z-index: 50;
-    padding: 8px 0;
+    padding: 0;
 }
+.notif-dropdown > *:last-child { border-bottom: 0; }
 .notif-item {
     padding: 10px 14px;
     font-size: 12px;
@@ -883,6 +884,9 @@ image.png
 
 .task-id-badge { font-family: var(--pixel); font-size: 9px; color: var(--purple); background: rgba(168,85,247,.1); padding: 4px 8px; border-radius: 4px; flex-shrink: 0; }
 .task-lesson-tag { font-size: 10px; color: var(--text-dim); margin-left: 8px; }
+.task-author-tag { font-size: 10px; color: var(--purple); margin-left: 8px; font-style: italic; }
+.task-author { font-size: 11px; color: var(--purple); margin-left: 12px; font-style: italic; }
+.attach-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .leaderboard-table { max-width: 700px; }
 .leaderboard-table .top-row td { color: var(--gold); font-weight: 700; }
@@ -1285,6 +1289,15 @@ image.png
     color: var(--cyan);
     background: rgba(0,229,255,.06);
 }
+
+.lesson-index { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.lesson-index h4 { font-family: var(--pixel); font-size: 9px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+.lesson-index-row { display: grid; grid-template-columns: 60px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+.lesson-index-row .li-id { font-family: var(--pixel); font-size: 9px; color: var(--cyan); }
+.lesson-index-row .li-order { color: var(--text-dim); font-size: 11px; }
+.lesson-index-row .li-title { color: var(--text); }
+
+.quest-id { display: inline-block; margin-left: 10px; padding: 2px 6px; background: rgba(0,229,255,.08); color: var(--cyan); border-radius: 4px; font-family: var(--pixel); font-size: 8px; }
 
 .group-move-select {
     padding: 6px 10px;

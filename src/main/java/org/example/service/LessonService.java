@@ -3,14 +3,18 @@ package org.example.service;
 import org.example.dto.LessonCreateRequest;
 import org.example.dto.LessonDto;
 import org.example.entity.Lesson;
+import org.example.entity.LessonTask;
+import org.example.entity.Role;
 import org.example.entity.Task;
 import org.example.entity.User;
 import org.example.repository.LessonRepository;
+import org.example.repository.LessonTaskRepository;
 import org.example.repository.TaskRepository;
 import org.example.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,25 +32,63 @@ public class LessonService {
     private final LessonRepository lessonRepo;
     private final TaskRepository taskRepo;
     private final UserRepository userRepo;
+    private final LessonTaskRepository lessonTaskRepo;
     private final NotificationService notificationService;
 
     public LessonService(LessonRepository lessonRepo, TaskRepository taskRepo, UserRepository userRepo,
-                         NotificationService notificationService) {
+                         LessonTaskRepository lessonTaskRepo, NotificationService notificationService) {
         this.lessonRepo = lessonRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
+        this.lessonTaskRepo = lessonTaskRepo;
         this.notificationService = notificationService;
     }
 
-    public Page<LessonDto> findPage(int page, int size) {
-        return lessonRepo.findAllByOrderByOrderIndexAsc(PageRequest.of(page, size))
+    public Page<LessonDto> findPageFor(String username, int page, int size) {
+        User viewer = userRepo.findByUsername(username).orElse(null);
+        var pageable = PageRequest.of(page, size);
+        if (viewer == null) return Page.empty(pageable);
+        if (viewer.getRole() == Role.TEACHER) {
+            return lessonRepo.findByAuthorIdOrderByOrderIndexAsc(viewer.getId(), pageable)
+                    .map(this::toDto);
+        }
+        User teacher = viewer.getTeacher();
+        if (teacher == null) return new PageImpl<>(List.of(), pageable, 0);
+        return lessonRepo.findByAuthorIdOrderByOrderIndexAsc(teacher.getId(), pageable)
                 .map(this::toDto);
     }
 
-    public LessonDto findById(Long id) {
-        return lessonRepo.findById(id)
-                .map(this::toDto)
+    public LessonDto findById(Long id, String username) {
+        Lesson lesson = lessonRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+        ensureCanView(lesson, username);
+        return toDto(lesson);
+    }
+
+    public LessonDto findByOrderForTeacher(int orderIndex, String teacherUsername) {
+        User teacher = userRepo.findByUsername(teacherUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        if (teacher.getRole() != Role.TEACHER) {
+            throw new IllegalArgumentException("Доступно только преподавателям");
+        }
+        Lesson lesson = lessonRepo.findByAuthorIdAndOrderIndex(teacher.getId(), orderIndex)
+                .orElseThrow(() -> new IllegalArgumentException("Подземелье №" + orderIndex + " у вас не найдено"));
+        return toDto(lesson);
+    }
+
+    public void ensureCanView(Lesson lesson, String username) {
+        User viewer = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        if (viewer.getRole() == Role.TEACHER) {
+            if (!lesson.getAuthor().getId().equals(viewer.getId())) {
+                throw new IllegalArgumentException("Этот урок создан другим учителем");
+            }
+            return;
+        }
+        User teacher = viewer.getTeacher();
+        if (teacher == null || !lesson.getAuthor().getId().equals(teacher.getId())) {
+            throw new IllegalArgumentException("Урок недоступен: вы не прикреплены к его автору");
+        }
     }
 
     @Transactional(readOnly = false)
@@ -89,6 +131,7 @@ public class LessonService {
     @Transactional(readOnly = false)
     public void delete(Long id) {
         log.info("Урок удалён: id={}", id);
+        lessonTaskRepo.deleteByLessonId(id);
         lessonRepo.deleteById(id);
     }
 
@@ -96,28 +139,35 @@ public class LessonService {
     public List<Long> attachTasks(Long lessonId, List<Long> taskIds) {
         Lesson lesson = lessonRepo.findById(lessonId)
                 .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
-        List<Task> existing = taskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId);
-        int nextIndex = existing.stream().mapToInt(Task::getOrderIndex).max().orElse(-1) + 1;
+
+        List<LessonTask> existing = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId);
+        int nextIndex = existing.stream().mapToInt(LessonTask::getOrderIndex).max().orElse(0) + 1;
 
         List<Long> attached = new ArrayList<>();
         for (Long taskId : new LinkedHashSet<>(taskIds)) {
             Task task = taskRepo.findById(taskId)
                     .orElseThrow(() -> new IllegalArgumentException("Задача #" + taskId + " не найдена"));
-            if (task.getLesson() == null || !task.getLesson().getId().equals(lessonId)) {
-                task.setLesson(lesson);
-                task.setOrderIndex(nextIndex++);
-                taskRepo.save(task);
+            if (lessonTaskRepo.findByLessonIdAndTaskId(lessonId, taskId).isEmpty()) {
+                lessonTaskRepo.save(new LessonTask(lesson, task, nextIndex++));
             }
             attached.add(task.getId());
         }
         return attached;
     }
 
+    @Transactional(readOnly = false)
+    public void detachTask(Long lessonId, Long taskId, String teacherUsername) {
+        Lesson lesson = lessonRepo.findById(lessonId)
+                .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+        ensureCanView(lesson, teacherUsername);
+        lessonTaskRepo.deleteLink(lessonId, taskId);
+    }
+
     private LessonDto toDto(Lesson l) {
-        int taskCount = taskRepo.findByLessonIdOrderByOrderIndexAsc(l.getId()).size();
+        long taskCount = lessonTaskRepo.countByLessonId(l.getId());
         return new LessonDto(
                 l.getId(), l.getTitle(), l.getDescription(), l.getContent(),
-                l.getOrderIndex(), l.getAuthor().getUsername(), taskCount
+                l.getOrderIndex(), l.getAuthor().getUsername(), (int) taskCount
         );
     }
 }

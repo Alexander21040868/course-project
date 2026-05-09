@@ -10,10 +10,6 @@ public class Task {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "lesson_id", nullable = false)
-    private Lesson lesson;
-
     @Column(nullable = false, length = 200)
     private String title;
 
@@ -37,13 +33,11 @@ public class Task {
     @Column(length = 2000)
     private String hints;
 
-    @Column(name = "order_index", nullable = false)
-    private int orderIndex;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "author_id")
+    private User author;
 
     public Long getId() { return id; }
-
-    public Lesson getLesson() { return lesson; }
-    public void setLesson(Lesson lesson) { this.lesson = lesson; }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -66,6 +60,6 @@ public class Task {
     public String getHints() { return hints; }
     public void setHints(String hints) { this.hints = hints; }
 
-    public int getOrderIndex() { return orderIndex; }
-    public void setOrderIndex(int orderIndex) { this.orderIndex = orderIndex; }
+    public User getAuthor() { return author; }
+    public void setAuthor(User author) { this.author = author; }
 }
