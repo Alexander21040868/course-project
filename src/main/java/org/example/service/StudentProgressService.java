@@ -18,22 +18,25 @@ public class StudentProgressService {
     private final SubmissionRepository submissionRepo;
     private final GroupInviteRepository inviteRepo;
     private final LessonTaskRepository lessonTaskRepo;
+    private final StudentTeacherRepository studentTeacherRepo;
 
     public StudentProgressService(UserRepository userRepo, TaskRepository taskRepo,
                                   LessonRepository lessonRepo, SubmissionRepository submissionRepo,
-                                  GroupInviteRepository inviteRepo, LessonTaskRepository lessonTaskRepo) {
+                                  GroupInviteRepository inviteRepo, LessonTaskRepository lessonTaskRepo,
+                                  StudentTeacherRepository studentTeacherRepo) {
         this.userRepo = userRepo;
         this.taskRepo = taskRepo;
         this.lessonRepo = lessonRepo;
         this.submissionRepo = submissionRepo;
         this.inviteRepo = inviteRepo;
         this.lessonTaskRepo = lessonTaskRepo;
+        this.studentTeacherRepo = studentTeacherRepo;
     }
 
     public List<StudentProgressDto> listGroup(String teacherUsername) {
         User teacher = requireTeacher(teacherUsername);
         long totalTasks = taskRepo.count();
-        return userRepo.findByRoleAndTeacherIdOrderByUsernameAsc(Role.STUDENT, teacher.getId()).stream()
+        return studentTeacherRepo.findStudentsByTeacherId(teacher.getId(), Role.STUDENT).stream()
                 .map(u -> {
                     long solved = submissionRepo.countDistinctTaskByUserIdAndStatus(
                             u.getId(), SubmissionStatus.CORRECT);
@@ -51,10 +54,7 @@ public class StudentProgressService {
         User teacher = requireTeacher(teacherUsername);
         String q = search == null ? "" : search.trim().toLowerCase();
         return userRepo.findByRoleOrderByUsernameAsc(Role.STUDENT).stream()
-                .filter(u -> {
-                    User t = u.getTeacher();
-                    return t == null || !t.getId().equals(teacher.getId());
-                })
+                .filter(u -> !studentTeacherRepo.existsByStudentIdAndTeacherId(u.getId(), teacher.getId()))
                 .filter(u -> q.isEmpty() || u.getUsername().toLowerCase().contains(q))
                 .map(u -> new StudentSummaryDto(
                         u.getId(),
@@ -70,9 +70,7 @@ public class StudentProgressService {
         User teacher = requireTeacher(teacherUsername);
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Студент не найден"));
-        if (user.getRole() != Role.STUDENT
-                || user.getTeacher() == null
-                || !user.getTeacher().getId().equals(teacher.getId())) {
+        if (!studentTeacherRepo.existsByStudentIdAndTeacherId(user.getId(), teacher.getId())) {
             throw new IllegalArgumentException("Студент не из вашей группы");
         }
 
@@ -93,7 +91,7 @@ public class StudentProgressService {
                     }).toList();
                     int solved = (int) taskProgress.stream().filter(TaskProgressDto::solved).count();
                     return new LessonProgressDto(lesson.getId(), lesson.getTitle(),
-                            solved, tasks.size(), taskProgress);
+                            solved, tasks.size(), taskProgress, teacher.getUsername(), lesson.getOrderIndex());
                 }).toList();
 
         return new StudentDetailDto(
@@ -106,11 +104,18 @@ public class StudentProgressService {
         User teacher = requireTeacher(teacherUsername);
         User student = userRepo.findById(studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Студент не найден"));
-        if (student.getTeacher() == null || !student.getTeacher().getId().equals(teacher.getId())) {
+        if (!studentTeacherRepo.existsByStudentIdAndTeacherId(student.getId(), teacher.getId())) {
             throw new IllegalArgumentException("Студент не в вашей группе");
         }
-        student.setTeacher(null);
-        student.setStudyGroup(null);
+        studentTeacherRepo.deleteByStudentIdAndTeacherId(student.getId(), teacher.getId());
+        if (student.getTeacher() != null && student.getTeacher().getId().equals(teacher.getId())) {
+            var next = studentTeacherRepo.findTeachersByStudentId(student.getId());
+            student.setTeacher(next.isEmpty() ? null : next.get(0));
+        }
+        if (student.getStudyGroup() != null
+                && student.getStudyGroup().getTeacher().getId().equals(teacher.getId())) {
+            student.setStudyGroup(null);
+        }
     }
 
     private User requireTeacher(String username) {

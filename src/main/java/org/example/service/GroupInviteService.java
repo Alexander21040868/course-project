@@ -4,10 +4,12 @@ import org.example.dto.GroupInviteDto;
 import org.example.entity.GroupInvite;
 import org.example.entity.Role;
 import org.example.entity.StudyGroup;
+import org.example.entity.StudentTeacherLink;
 import org.example.entity.User;
 import org.example.repository.GroupInviteRepository;
 import org.example.repository.StudyGroupRepository;
 import org.example.repository.UserRepository;
+import org.example.repository.StudentTeacherRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,13 +23,16 @@ public class GroupInviteService {
     private final StudyGroupRepository groupRepo;
     private final UserRepository userRepo;
     private final NotificationService notifications;
+    private final StudentTeacherRepository studentTeacherRepo;
 
     public GroupInviteService(GroupInviteRepository inviteRepo, StudyGroupRepository groupRepo,
-                              UserRepository userRepo, NotificationService notifications) {
+                              UserRepository userRepo, NotificationService notifications,
+                              StudentTeacherRepository studentTeacherRepo) {
         this.inviteRepo = inviteRepo;
         this.groupRepo = groupRepo;
         this.userRepo = userRepo;
         this.notifications = notifications;
+        this.studentTeacherRepo = studentTeacherRepo;
     }
 
     @Transactional
@@ -38,7 +43,7 @@ public class GroupInviteService {
         if (student.getRole() != Role.STUDENT) {
             throw new IllegalArgumentException("Можно приглашать только студентов");
         }
-        if (student.getTeacher() != null && student.getTeacher().getId().equals(teacher.getId())) {
+        if (studentTeacherRepo.existsByStudentIdAndTeacherId(student.getId(), teacher.getId())) {
             throw new IllegalArgumentException("Студент уже в вашей группе");
         }
         if (inviteRepo.existsByTeacherIdAndStudentIdAndStatus(teacher.getId(), student.getId(), GroupInvite.Status.PENDING)) {
@@ -84,6 +89,9 @@ public class GroupInviteService {
         }
 
         invite.setStatus(GroupInvite.Status.ACCEPTED);
+        if (!studentTeacherRepo.existsByStudentIdAndTeacherId(student.getId(), invite.getTeacher().getId())) {
+            studentTeacherRepo.save(new StudentTeacherLink(student.getId(), invite.getTeacher().getId()));
+        }
         student.setTeacher(invite.getTeacher());
         student.setStudyGroup(invite.getGroup());
 

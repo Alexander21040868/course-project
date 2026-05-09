@@ -66,6 +66,10 @@
         <main class="main-content">
             <div class="view active" id="view-quests">
                 <div id="dailyTaskCard" class="daily-card" style="display:none"></div>
+                <div id="questTeacherBar" class="quest-teacher-bar" style="display:none">
+                    <label for="questTeacherSelect">Подземелья учителя</label>
+                    <select id="questTeacherSelect"></select>
+                </div>
                 <div class="quest-map" id="questMap"></div>
                 <div class="pager-row" id="questPager" style="display:none"></div>
             </div>
@@ -168,7 +172,7 @@
                             <p class="admin-edit-hint">Правка урока: id и «Подставить в форму», затем «Сохранить». «Новый урок» — сброс.</p>
                             <div class="admin-edit-bar">
                                 <label>Номер подземелья</label>
-                                <input type="number" id="loadLessonOrder" min="1" placeholder="например: 5">
+                                <input type="number" id="loadLessonOrder" min="0" step="1" placeholder="например: 5">
                                 <button type="button" class="btn-admin btn-admin-ghost" id="loadLessonBtn">Подставить в форму</button>
                                 <button type="button" class="btn-admin btn-admin-ghost" id="clearLessonEditBtn">Новый урок</button>
                             </div>
@@ -183,14 +187,14 @@
                             </div>
                             <button type="submit" class="btn-admin" id="lessonFormSubmitBtn">Создать урок</button>
                         </form>
-                        <input type="hidden" id="editLessonId" value="" autocomplete="off">
+                        <input type="hidden" id="editLessonOrder" value="" autocomplete="off">
                         <div class="lesson-index" id="myLessonsIndex"></div>
                     </div>
                     <div class="admin-section">
                         <h3>🔗 Прикрепить или открепить задачи</h3>
                         <p class="admin-edit-hint">Введите номер подземелья и id задач. Прикрепление не отнимает задачу у других уроков — каждая задача может быть в нескольких подземельях.</p>
                         <form class="admin-form" id="attachTasksForm">
-                            <div><label>Номер подземелья</label><input type="number" name="lessonOrder" min="1" required placeholder="например: 3"></div>
+                            <div><label>Номер подземелья</label><input type="number" name="lessonOrder" min="0" step="1" required placeholder="например: 3"></div>
                             <div><label>Id задач (через запятую)</label><input type="text" name="taskIds" required placeholder="2, 5, 8"></div>
                             <div class="attach-actions">
                                 <button type="submit" class="btn-admin" data-action="attach">Прикрепить</button>
@@ -211,7 +215,7 @@
                             <div><label>Название</label><input type="text" name="title" required placeholder="Hello World"></div>
                             <div><label>Описание</label><textarea name="description" placeholder="Описание..."></textarea></div>
                             <div><label>Сложность</label><select name="difficulty"><option value="EASY">Лёгкая</option><option value="MEDIUM">Средняя</option><option value="HARD">Сложная</option></select></div>
-                            <div><label>Награда XP</label><input type="number" name="xpReward" value="10"></div>
+                            <div><label>Награда XP</label><input type="number" name="xpReward" value="10" min="1" max="300"></div>
                             <div><label>Шаблон кода</label><textarea name="templateCode" placeholder="#include <stdio.h>"></textarea></div>
                             <div class="admin-tc-block">
                                 <label>Примеры ввода и ожидаемого вывода</label>
@@ -267,7 +271,7 @@
                             <div><label>Описание</label><textarea name="description" placeholder="Описание челленджа..."></textarea></div>
                             <div><label>Начало</label><input type="datetime-local" name="startTime" required></div>
                             <div><label>Конец</label><input type="datetime-local" name="endTime" required></div>
-                            <div><label>Бонус XP</label><input type="number" name="bonusXp" value="50"></div>
+                            <div><label>Бонус XP</label><input type="number" name="bonusXp" value="50" min="0" max="2000" title="0 — 50 по умолчанию, иначе 1–2000"></div>
                             <div><label>ID задач (через запятую)</label><input type="text" name="taskIds" required placeholder="1,2,3"></div>
                             <button type="submit" class="btn-admin">Создать челлендж</button>
                         </form>

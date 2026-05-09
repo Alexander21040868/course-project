@@ -41,6 +41,20 @@ public class AdminController {
         return ResponseEntity.ok(lessonService.create(req, principal.getName()));
     }
 
+    @PutMapping("/lessons/by-order/{currentOrder}")
+    public ResponseEntity<LessonDto> updateLessonByOrder(@PathVariable("currentOrder") int currentOrder,
+                                                         @Valid @RequestBody LessonCreateRequest req,
+                                                         Principal principal) {
+        return ResponseEntity.ok(lessonService.updateByOrderForTeacher(currentOrder, req, principal.getName()));
+    }
+
+    @DeleteMapping("/lessons/by-order/{orderIndex}")
+    public ResponseEntity<Void> deleteLessonByOrder(@PathVariable("orderIndex") int orderIndex,
+                                                    Principal principal) {
+        lessonService.deleteByOrderForTeacher(orderIndex, principal.getName());
+        return ResponseEntity.noContent().build();
+    }
+
     @PutMapping("/lessons/{id}")
     public ResponseEntity<LessonDto> updateLesson(@PathVariable("id") Long id,
                                                    @Valid @RequestBody LessonCreateRequest req) {

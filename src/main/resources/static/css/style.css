@@ -1292,12 +1292,22 @@ image.png
 
 .lesson-index { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 .lesson-index h4 { font-family: var(--pixel); font-size: 9px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
-.lesson-index-row { display: grid; grid-template-columns: 60px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+.lesson-index-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
 .lesson-index-row .li-id { font-family: var(--pixel); font-size: 9px; color: var(--cyan); }
+.quest-teacher-bar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 16px; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+}
+.quest-teacher-bar label { font-family: var(--pixel); font-size: 9px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+.quest-teacher-bar select {
+    min-width: 180px; padding: 8px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px;
+}
+.quest-teacher-bar select:focus { outline: none; border-color: var(--cyan); }
 .lesson-index-row .li-order { color: var(--text-dim); font-size: 11px; }
 .lesson-index-row .li-title { color: var(--text); }
 
-.quest-id { display: inline-block; margin-left: 10px; padding: 2px 6px; background: rgba(0,229,255,.08); color: var(--cyan); border-radius: 4px; font-family: var(--pixel); font-size: 8px; }
 
 .group-move-select {
     padding: 6px 10px;

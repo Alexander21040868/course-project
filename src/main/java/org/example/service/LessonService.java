@@ -2,6 +2,7 @@ package org.example.service;
 
 import org.example.dto.LessonCreateRequest;
 import org.example.dto.LessonDto;
+import org.example.dto.TeacherBriefDto;
 import org.example.entity.Lesson;
 import org.example.entity.LessonTask;
 import org.example.entity.Role;
@@ -11,6 +12,7 @@ import org.example.repository.LessonRepository;
 import org.example.repository.LessonTaskRepository;
 import org.example.repository.TaskRepository;
 import org.example.repository.UserRepository;
+import org.example.repository.StudentTeacherRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -33,18 +35,21 @@ public class LessonService {
     private final TaskRepository taskRepo;
     private final UserRepository userRepo;
     private final LessonTaskRepository lessonTaskRepo;
+    private final StudentTeacherRepository studentTeacherRepo;
     private final NotificationService notificationService;
 
     public LessonService(LessonRepository lessonRepo, TaskRepository taskRepo, UserRepository userRepo,
-                         LessonTaskRepository lessonTaskRepo, NotificationService notificationService) {
+                         LessonTaskRepository lessonTaskRepo, StudentTeacherRepository studentTeacherRepo,
+                         NotificationService notificationService) {
         this.lessonRepo = lessonRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
         this.lessonTaskRepo = lessonTaskRepo;
+        this.studentTeacherRepo = studentTeacherRepo;
         this.notificationService = notificationService;
     }
 
-    public Page<LessonDto> findPageFor(String username, int page, int size) {
+    public Page<LessonDto> findPageFor(String username, String teacherUsernameParam, int page, int size) {
         User viewer = userRepo.findByUsername(username).orElse(null);
         var pageable = PageRequest.of(page, size);
         if (viewer == null) return Page.empty(pageable);
@@ -52,10 +57,39 @@ public class LessonService {
             return lessonRepo.findByAuthorIdOrderByOrderIndexAsc(viewer.getId(), pageable)
                     .map(this::toDto);
         }
-        User teacher = viewer.getTeacher();
-        if (teacher == null) return new PageImpl<>(List.of(), pageable, 0);
-        return lessonRepo.findByAuthorIdOrderByOrderIndexAsc(teacher.getId(), pageable)
+        User target = resolveQuestTeacherForStudent(viewer, teacherUsernameParam);
+        if (target == null) return new PageImpl<>(List.of(), pageable, 0);
+        return lessonRepo.findByAuthorIdOrderByOrderIndexAsc(target.getId(), pageable)
                 .map(this::toDto);
+    }
+
+    private User resolveQuestTeacherForStudent(User student, String teacherUsernameParam) {
+        List<User> linked = studentTeacherRepo.findTeachersByStudentId(student.getId());
+        if (linked.isEmpty() && student.getTeacher() != null) {
+            linked = List.of(student.getTeacher());
+        }
+        if (linked.isEmpty()) return null;
+
+        if (teacherUsernameParam != null && !teacherUsernameParam.isBlank()) {
+            String want = teacherUsernameParam.trim();
+            return linked.stream()
+                    .filter(t -> t.getUsername().equalsIgnoreCase(want))
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (linked.size() == 1) return linked.get(0);
+        return null;
+    }
+
+    public List<TeacherBriefDto> listLinkedTeachersForStudent(String studentUsername) {
+        User student = userRepo.findByUsername(studentUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        if (student.getRole() != Role.STUDENT) return List.of();
+        List<User> linked = studentTeacherRepo.findTeachersByStudentId(student.getId());
+        if (linked.isEmpty() && student.getTeacher() != null) {
+            linked = List.of(student.getTeacher());
+        }
+        return linked.stream().map(t -> new TeacherBriefDto(t.getUsername())).toList();
     }
 
     public LessonDto findById(Long id, String username) {
@@ -72,7 +106,7 @@ public class LessonService {
             throw new IllegalArgumentException("Доступно только преподавателям");
         }
         Lesson lesson = lessonRepo.findByAuthorIdAndOrderIndex(teacher.getId(), orderIndex)
-                .orElseThrow(() -> new IllegalArgumentException("Подземелье №" + orderIndex + " у вас не найдено"));
+                .orElseThrow(() -> new IllegalArgumentException("Подземелье #" + orderIndex + " у вас не найдено"));
         return toDto(lesson);
     }
 
@@ -86,9 +120,13 @@ public class LessonService {
             return;
         }
         User teacher = viewer.getTeacher();
-        if (teacher == null || !lesson.getAuthor().getId().equals(teacher.getId())) {
-            throw new IllegalArgumentException("Урок недоступен: вы не прикреплены к его автору");
+        if (studentTeacherRepo.existsByStudentIdAndTeacherId(viewer.getId(), lesson.getAuthor().getId())) {
+            return;
         }
+        if (teacher != null && lesson.getAuthor().getId().equals(teacher.getId())) {
+            return;
+        }
+        throw new IllegalArgumentException("Урок недоступен: вы не прикреплены к его автору");
     }
 
     @Transactional(readOnly = false)
@@ -103,6 +141,10 @@ public class LessonService {
         lesson.setOrderIndex(req.orderIndex());
         lesson.setAuthor(author);
 
+        if (lessonRepo.existsByAuthorIdAndOrderIndex(author.getId(), req.orderIndex())) {
+            throw new IllegalArgumentException("У вас уже есть подземелье с номером " + req.orderIndex());
+        }
+
         Lesson saved = lessonRepo.save(lesson);
         if (req.taskIds() != null && !req.taskIds().isEmpty()) {
             attachTasks(saved.getId(), req.taskIds());
@@ -116,6 +158,11 @@ public class LessonService {
     public LessonDto update(Long id, LessonCreateRequest req) {
         Lesson lesson = lessonRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+        if (req.orderIndex() != lesson.getOrderIndex()
+                && lessonRepo.existsByAuthorIdAndOrderIndexAndIdNot(
+                lesson.getAuthor().getId(), req.orderIndex(), lesson.getId())) {
+            throw new IllegalArgumentException("У вас уже есть подземелье с номером " + req.orderIndex());
+        }
         lesson.setTitle(req.title());
         lesson.setDescription(req.description());
         lesson.setContent(req.content());
@@ -126,6 +173,44 @@ public class LessonService {
         }
         log.info("Урок обновлён: id={}", id);
         return toDto(saved);
+    }
+
+    @Transactional(readOnly = false)
+    public LessonDto updateByOrderForTeacher(int currentOrderIndex, LessonCreateRequest req, String teacherUsername) {
+        User teacher = userRepo.findByUsername(teacherUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        if (teacher.getRole() != Role.TEACHER) {
+            throw new IllegalArgumentException("Доступно только преподавателям");
+        }
+        Lesson lesson = lessonRepo.findByAuthorIdAndOrderIndex(teacher.getId(), currentOrderIndex)
+                .orElseThrow(() -> new IllegalArgumentException("Подземелье #" + currentOrderIndex + " у вас не найдено"));
+        if (req.orderIndex() != lesson.getOrderIndex()
+                && lessonRepo.existsByAuthorIdAndOrderIndexAndIdNot(
+                teacher.getId(), req.orderIndex(), lesson.getId())) {
+            throw new IllegalArgumentException("У вас уже есть подземелье с номером " + req.orderIndex());
+        }
+        lesson.setTitle(req.title());
+        lesson.setDescription(req.description());
+        lesson.setContent(req.content());
+        lesson.setOrderIndex(req.orderIndex());
+        Lesson saved = lessonRepo.save(lesson);
+        if (req.taskIds() != null && !req.taskIds().isEmpty()) {
+            attachTasks(saved.getId(), req.taskIds());
+        }
+        log.info("Урок обновлён по порядку: было #{}, id={}", currentOrderIndex, lesson.getId());
+        return toDto(saved);
+    }
+
+    @Transactional(readOnly = false)
+    public void deleteByOrderForTeacher(int orderIndex, String teacherUsername) {
+        User teacher = userRepo.findByUsername(teacherUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        if (teacher.getRole() != Role.TEACHER) {
+            throw new IllegalArgumentException("Доступно только преподавателям");
+        }
+        Lesson lesson = lessonRepo.findByAuthorIdAndOrderIndex(teacher.getId(), orderIndex)
+                .orElseThrow(() -> new IllegalArgumentException("Подземелье #" + orderIndex + " у вас не найдено"));
+        delete(lesson.getId());
     }
 
     @Transactional(readOnly = false)

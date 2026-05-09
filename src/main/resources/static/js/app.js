@@ -56,7 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const state = {
         currentView: 'quests', currentLessonId: null, currentTaskId: null, profile: null,
         lastSubmitOutput: '', libraryArticles: [], selectedArticleId: null,
-        lessonPage: 0, catalogPage: 0
+        lessonPage: 0, catalogPage: 0,
+        questTeachers: null, selectedQuestTeacher: null
     };
     const $ = id => document.getElementById(id);
 
@@ -136,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const p = await API.get('/profile');
             state.profile = p;
+            state.questTeachers = null;
             $('charName').textContent = p.username;
             $('charRole').textContent = p.role === 'TEACHER' ? 'Мастер' : getTitle(p.level);
             $('xpText').textContent = p.rating + ' elo · ' + p.xp + ' xp';
@@ -343,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="progress-list">${(p.lessonsProgress || []).map(l => `
                     <div class="progress-item">
                         <div class="progress-item-head">
-                            <span>${esc(l.title)}</span>
+                            <span>${l.teacherUsername ? esc(l.teacherUsername) + ' — ' : ''}${l.dungeonOrder != null ? '#' + l.dungeonOrder + ' — ' : ''}${esc(l.title)}</span>
                             <span class="progress-nums">${l.solved}/${l.total}</span>
                         </div>
                         <div class="progress-bar"><div class="progress-fill" style="width:${l.total>0?Math.round(l.solved*100/l.total):0}%"></div></div>
@@ -448,6 +450,47 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { $('dailyTaskCard').style.display = 'none'; }
     }
 
+    async function syncQuestTeacherBar() {
+        const bar = $('questTeacherBar');
+        const sel = $('questTeacherSelect');
+        if (!bar || !sel) return null;
+        if (!state.profile || state.profile.role !== 'STUDENT') {
+            bar.style.display = 'none';
+            state.questTeachers = null;
+            state.selectedQuestTeacher = null;
+            return null;
+        }
+        if (!state.questTeachers) {
+            try {
+                state.questTeachers = await API.get('/profile/my-teachers') || [];
+            } catch {
+                state.questTeachers = [];
+            }
+        }
+        const teachers = state.questTeachers;
+        if (!teachers.length) {
+            bar.style.display = 'none';
+            state.selectedQuestTeacher = null;
+            return null;
+        }
+        bar.style.display = '';
+        let current = sessionStorage.getItem('cq_quest_teacher') || '';
+        if (teachers.length === 1) current = teachers[0].username;
+        if (!current || !teachers.some(t => t.username === current)) current = teachers[0].username;
+        state.selectedQuestTeacher = current;
+        sessionStorage.setItem('cq_quest_teacher', current);
+        sel.innerHTML = teachers.map(t =>
+            `<option value="${escAttr(t.username)}" ${t.username === current ? 'selected' : ''}>${esc(t.username)}</option>`
+        ).join('');
+        sel.onchange = () => {
+            state.selectedQuestTeacher = sel.value;
+            sessionStorage.setItem('cq_quest_teacher', sel.value);
+            state.lessonPage = 0;
+            loadLessons(0);
+        };
+        return state.selectedQuestTeacher;
+    }
+
     async function loadLessons(page) {
         if (page !== undefined) state.lessonPage = page;
         const pg = state.lessonPage;
@@ -455,7 +498,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const pagerEl = $('questPager');
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
-            const data = await API.get('/lessons?page=' + pg + '&size=8');
+            if (state.profile?.role === 'STUDENT') {
+                await syncQuestTeacherBar();
+                if (!state.questTeachers?.length) {
+                    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗺</div><p>Нет прикреплённых учителей — примите приглашение в уведомлениях.</p></div>';
+                    pagerEl.style.display = 'none';
+                    return;
+                }
+                if (state.questTeachers.length > 1 && !state.selectedQuestTeacher) {
+                    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗺</div><p>Выберите учителя над картой.</p></div>';
+                    pagerEl.style.display = 'none';
+                    return;
+                }
+            }
+            let q = '/lessons?page=' + pg + '&size=8';
+            if (state.profile?.role === 'STUDENT' && state.selectedQuestTeacher) {
+                q += '&teacherUsername=' + encodeURIComponent(state.selectedQuestTeacher);
+            }
+            const data = await API.get(q);
             const lessons = data.content ?? data;
             const totalPages = data.totalPages ?? 1;
             if (!lessons.length) {
@@ -465,7 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             el.innerHTML = lessons.map(l => `
                 <div class="quest-card" data-id="${l.id}">
-                    <div class="quest-order">ПОДЗЕМЕЛЬЕ #${l.orderIndex}<span class="quest-id">id ${l.id}</span></div>
+                    <div class="quest-order">ПОДЗЕМЕЛЬЕ #${l.orderIndex}</div>
                     <h3>${esc(l.title)}</h3>
                     <p>${esc(l.description || '')}</p>
                     <div class="quest-meta"><span>⚔ ${l.taskCount} задач</span></div>
@@ -876,13 +936,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!lessons.length) { el.innerHTML = ''; return; }
             el.innerHTML = '<h4>Ваши подземелья</h4>' + lessons.map(l => `
                 <div class="lesson-index-row">
-                    <span class="li-id">id ${l.id}</span>
                     <span class="li-title">${esc(l.title)}</span>
-                    <span class="li-order">порядок ${l.orderIndex}</span>
-                    <button type="button" class="btn-admin btn-admin-ghost" data-edit-lesson="${l.id}">Редактировать</button>
+                    <span class="li-order">#${l.orderIndex}</span>
+                    <button type="button" class="btn-admin btn-admin-ghost" data-edit-order="${l.orderIndex}">Редактировать</button>
                 </div>`).join('');
-            el.querySelectorAll('[data-edit-lesson]').forEach(b => b.addEventListener('click', () => {
-                $('loadLessonId').value = String(b.dataset.editLesson);
+            el.querySelectorAll('[data-edit-order]').forEach(b => b.addEventListener('click', () => {
+                $('loadLessonOrder').value = String(b.dataset.editOrder);
                 $('loadLessonBtn').click();
             }));
         } catch (e) { el.innerHTML = ''; }
@@ -967,8 +1026,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     $('loadLessonBtn')?.addEventListener('click', async () => {
-        const order = +$('loadLessonOrder').value;
-        if (!order) { alert('Введите номер подземелья.'); return; }
+        const order = parseDungeonOrder($('loadLessonOrder').value);
+        if (!Number.isFinite(order)) { alert('Введите номер подземелья (целое число от 0).'); return; }
         try {
             const d = await API.get('/admin/lessons/by-order/' + order);
             const f = $('createLessonForm');
@@ -977,13 +1036,13 @@ document.addEventListener('DOMContentLoaded', () => {
             setFormField(f, 'content', d.content);
             setFormField(f, 'orderIndex', d.orderIndex ?? 0);
             setFormField(f, 'taskIds', '');
-            $('editLessonId').value = String(d.id);
+            $('editLessonOrder').value = String(order);
             $('lessonFormSubmitBtn').textContent = 'Сохранить урок';
         } catch (err) { alert(err.message); }
     });
     $('clearLessonEditBtn')?.addEventListener('click', () => {
         $('createLessonForm').reset();
-        $('editLessonId').value = '';
+        $('editLessonOrder').value = '';
         $('loadLessonOrder').value = '';
         $('lessonFormSubmitBtn').textContent = 'Создать урок';
     });
@@ -1041,6 +1100,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return String(raw).split(/[\s,;]+/).map(s => +s).filter(n => Number.isFinite(n) && n > 0);
     }
 
+    function parseDungeonOrder(raw) {
+        if (raw == null) return NaN;
+        const s = String(raw).trim();
+        if (s === '') return NaN;
+        const n = Number(s);
+        if (!Number.isInteger(n) || n < 0) return NaN;
+        return n;
+    }
+
     $('createLessonForm').addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(e.target);
@@ -1052,23 +1120,26 @@ document.addEventListener('DOMContentLoaded', () => {
             orderIndex: +fd.get('orderIndex'),
             taskIds
         };
-        const lid = $('editLessonId').value;
+        const rawEdit = ($('editLessonOrder') && $('editLessonOrder').value != null)
+            ? String($('editLessonOrder').value).trim() : '';
         try {
-            const saved = lid
-                ? await API.put('/admin/lessons/' + lid, body)
+            const saved = rawEdit !== ''
+                ? await API.put('/admin/lessons/by-order/' + encodeURIComponent(rawEdit), body)
                 : await API.post('/admin/lessons', body);
-            if (lid) {
-                if (saved && saved.id != null) $('editLessonId').value = String(saved.id);
+            if (rawEdit !== '') {
                 $('lessonFormSubmitBtn').textContent = 'Сохранить урок';
-                if (saved?.orderIndex != null) $('loadLessonOrder').value = String(saved.orderIndex);
+                if (saved?.orderIndex != null) {
+                    $('editLessonOrder').value = String(saved.orderIndex);
+                    $('loadLessonOrder').value = String(saved.orderIndex);
+                }
             } else {
                 e.target.reset();
-                $('editLessonId').value = '';
+                $('editLessonOrder').value = '';
                 $('lessonFormSubmitBtn').textContent = 'Создать урок';
                 if (saved?.orderIndex != null) $('loadLessonOrder').value = String(saved.orderIndex);
             }
             const detail = taskIds.length ? `Прикреплено задач: ${taskIds.length}` : '';
-            showToast('📖', lid ? 'Урок сохранён' : 'Урок создан', detail);
+            showToast('📖', rawEdit !== '' ? 'Урок сохранён' : 'Урок создан', detail);
             loadMyLessonsIndex();
         } catch (err) { alert(err.message); }
     });
@@ -1081,9 +1152,9 @@ document.addEventListener('DOMContentLoaded', () => {
     $('attachTasksForm')?.addEventListener('submit', async e => {
         e.preventDefault();
         const fd = new FormData(e.target);
-        const order = +fd.get('lessonOrder');
+        const order = parseDungeonOrder(fd.get('lessonOrder'));
         const taskIds = parseIdList(fd.get('taskIds'));
-        if (!order || !taskIds.length) {
+        if (!Number.isFinite(order) || !taskIds.length) {
             alert('Укажите номер подземелья и хотя бы один id задачи.');
             return;
         }
@@ -1091,7 +1162,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const lesson = await resolveLessonByOrder(order);
             const r = await API.post('/admin/lessons/' + lesson.id + '/tasks', { taskIds });
             const n = (r && r.attachedTaskIds && r.attachedTaskIds.length) || taskIds.length;
-            showToast('🔗', 'Задачи прикреплены', `Подземелье №${order}: ${n} задач(и)`);
+            showToast('🔗', 'Задачи прикреплены', `Подземелье #${order}: ${n} задач(и)`);
             e.target.reset();
         } catch (err) { alert(err.message); }
     });
@@ -1099,9 +1170,9 @@ document.addEventListener('DOMContentLoaded', () => {
     $('detachTasksBtn')?.addEventListener('click', async () => {
         const f = $('attachTasksForm');
         const fd = new FormData(f);
-        const order = +fd.get('lessonOrder');
+        const order = parseDungeonOrder(fd.get('lessonOrder'));
         const taskIds = parseIdList(fd.get('taskIds'));
-        if (!order || !taskIds.length) {
+        if (!Number.isFinite(order) || !taskIds.length) {
             alert('Укажите номер подземелья и хотя бы один id задачи.');
             return;
         }
@@ -1110,7 +1181,7 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const tid of taskIds) {
                 await API.delete('/admin/lessons/' + lesson.id + '/tasks/' + tid);
             }
-            showToast('🪶', 'Задачи откреплены', `Подземелье №${order}: ${taskIds.length}`);
+            showToast('🪶', 'Задачи откреплены', `Подземелье #${order}: ${taskIds.length}`);
             f.reset();
         } catch (err) { alert(err.message); }
     });
@@ -1187,6 +1258,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function diffLabel(d) { return { EASY:'🟢 Лёгкая', MEDIUM:'🟡 Средняя', HARD:'🔴 Сложная' }[d] || d; }
     function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function escAttr(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
     function formatMsk(iso) {
         if (!iso) return '';
         const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
@@ -1240,5 +1315,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if ($('taskExamples')) resetTaskExamples();
     syncArticlePreview();
 
-    loadProfile(); loadLessons();
+    (async () => {
+        await loadProfile();
+        await loadLessons();
+    })();
 });

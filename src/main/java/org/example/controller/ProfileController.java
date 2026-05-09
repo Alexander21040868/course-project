@@ -4,11 +4,13 @@ import org.example.dto.*;
 import org.example.entity.*;
 import org.example.repository.*;
 import org.example.service.GamificationService;
+import org.example.service.LessonService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -21,18 +23,29 @@ public class ProfileController {
     private final LessonRepository lessonRepo;
     private final TaskRepository taskRepo;
     private final LessonTaskRepository lessonTaskRepo;
+    private final StudentTeacherRepository studentTeacherRepo;
     private final GamificationService gamificationService;
+    private final LessonService lessonService;
 
     public ProfileController(UserRepository userRepo, SubmissionRepository submissionRepo,
                              LessonRepository lessonRepo, TaskRepository taskRepo,
                              LessonTaskRepository lessonTaskRepo,
-                             GamificationService gamificationService) {
+                             StudentTeacherRepository studentTeacherRepo,
+                             GamificationService gamificationService,
+                             LessonService lessonService) {
         this.userRepo = userRepo;
         this.submissionRepo = submissionRepo;
         this.lessonRepo = lessonRepo;
         this.taskRepo = taskRepo;
         this.lessonTaskRepo = lessonTaskRepo;
+        this.studentTeacherRepo = studentTeacherRepo;
         this.gamificationService = gamificationService;
+        this.lessonService = lessonService;
+    }
+
+    @GetMapping("/my-teachers")
+    public ResponseEntity<List<TeacherBriefDto>> myTeachers(Principal principal) {
+        return ResponseEntity.ok(lessonService.listLinkedTeachersForStudent(principal.getName()));
     }
 
     @GetMapping
@@ -45,31 +58,7 @@ public class ProfileController {
         long totalTasks = taskRepo.count();
         List<AchievementDto> achievements = gamificationService.getUserAchievements(user.getId());
 
-        List<Lesson> visibleLessons;
-        if (user.getRole() == Role.TEACHER) {
-            visibleLessons = lessonRepo.findByAuthorIdOrderByOrderIndexAsc(user.getId());
-        } else if (user.getTeacher() != null) {
-            visibleLessons = lessonRepo.findByAuthorIdOrderByOrderIndexAsc(user.getTeacher().getId());
-        } else {
-            visibleLessons = List.of();
-        }
-
-        List<LessonProgressDto> lessonsProgress = visibleLessons.stream()
-                .map(lesson -> {
-                    List<Task> tasks = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId()).stream()
-                            .map(LessonTask::getTask).toList();
-                    List<TaskProgressDto> taskProgress = tasks.stream().map(t -> {
-                        boolean solved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
-                                user.getId(), t.getId(), SubmissionStatus.CORRECT);
-                        long attempts = submissionRepo.findByUserIdAndTaskIdOrderBySubmittedAtDesc(
-                                user.getId(), t.getId()).size();
-                        return new TaskProgressDto(t.getId(), t.getTitle(),
-                                t.getDifficulty().name(), solved, attempts);
-                    }).toList();
-                    int solved = (int) taskProgress.stream().filter(TaskProgressDto::solved).count();
-                    return new LessonProgressDto(lesson.getId(), lesson.getTitle(),
-                            solved, tasks.size(), taskProgress);
-                }).toList();
+        List<LessonProgressDto> lessonsProgress = buildLessonsProgress(user);
 
         List<SubmissionHistoryDto> recent = submissionRepo.findByUserIdOrderBySubmittedAtDesc(user.getId())
                 .stream().limit(10)
@@ -87,5 +76,41 @@ public class ProfileController {
                 user.getCreatedAt(),
                 lessonsProgress, recent, achievements
         ));
+    }
+
+    private List<LessonProgressDto> buildLessonsProgress(User user) {
+        List<LessonProgressDto> out = new ArrayList<>();
+        if (user.getRole() == Role.TEACHER) {
+            for (Lesson lesson : lessonRepo.findByAuthorIdOrderByOrderIndexAsc(user.getId())) {
+                out.add(lessonProgress(user, lesson, null, lesson.getOrderIndex()));
+            }
+            return out;
+        }
+        List<User> teachers = studentTeacherRepo.findTeachersByStudentId(user.getId());
+        if (teachers.isEmpty() && user.getTeacher() != null) {
+            teachers = List.of(user.getTeacher());
+        }
+        for (User t : teachers) {
+            for (Lesson lesson : lessonRepo.findByAuthorIdOrderByOrderIndexAsc(t.getId())) {
+                out.add(lessonProgress(user, lesson, t.getUsername(), lesson.getOrderIndex()));
+            }
+        }
+        return out;
+    }
+
+    private LessonProgressDto lessonProgress(User user, Lesson lesson, String teacherUsername, int dungeonOrder) {
+        List<Task> tasks = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId()).stream()
+                .map(LessonTask::getTask).toList();
+        List<TaskProgressDto> taskProgress = tasks.stream().map(t -> {
+            boolean solved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
+                    user.getId(), t.getId(), SubmissionStatus.CORRECT);
+            long attempts = submissionRepo.findByUserIdAndTaskIdOrderBySubmittedAtDesc(
+                    user.getId(), t.getId()).size();
+            return new TaskProgressDto(t.getId(), t.getTitle(),
+                    t.getDifficulty().name(), solved, attempts);
+        }).toList();
+        int solved = (int) taskProgress.stream().filter(TaskProgressDto::solved).count();
+        return new LessonProgressDto(lesson.getId(), lesson.getTitle(),
+                solved, tasks.size(), taskProgress, teacherUsername, dungeonOrder);
     }
 }

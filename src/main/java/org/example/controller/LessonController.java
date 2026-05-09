@@ -20,11 +20,12 @@ public class LessonController {
 
     @GetMapping
     public ResponseEntity<Page<LessonDto>> getAll(
+            @RequestParam(value = "teacherUsername", required = false) String teacherUsername,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "20") int size,
             Principal principal) {
         int safeSize = Math.min(Math.max(size, 1), 100);
-        return ResponseEntity.ok(lessonService.findPageFor(principal.getName(), page, safeSize));
+        return ResponseEntity.ok(lessonService.findPageFor(principal.getName(), teacherUsername, page, safeSize));
     }
 
     @GetMapping("/{id}")

@@ -6,6 +6,7 @@ import org.example.dto.TaskEditDto;
 import org.example.dto.TestCaseDto;
 import org.example.entity.*;
 import org.example.repository.*;
+import org.example.util.XpLimits;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -25,16 +26,19 @@ public class TaskService {
     private final TestCaseRepository testCaseRepo;
     private final LessonTaskRepository lessonTaskRepo;
     private final LessonRepository lessonRepo;
+    private final StudentTeacherRepository studentTeacherRepo;
 
     public TaskService(TaskRepository taskRepo, SubmissionRepository submissionRepo,
                        UserRepository userRepo, TestCaseRepository testCaseRepo,
-                       LessonTaskRepository lessonTaskRepo, LessonRepository lessonRepo) {
+                       LessonTaskRepository lessonTaskRepo, LessonRepository lessonRepo,
+                       StudentTeacherRepository studentTeacherRepo) {
         this.taskRepo = taskRepo;
         this.submissionRepo = submissionRepo;
         this.userRepo = userRepo;
         this.testCaseRepo = testCaseRepo;
         this.lessonTaskRepo = lessonTaskRepo;
         this.lessonRepo = lessonRepo;
+        this.studentTeacherRepo = studentTeacherRepo;
     }
 
     public Page<TaskDto> findPage(String search, String username, int page, int size) {
@@ -74,9 +78,14 @@ public class TaskService {
                 throw new IllegalArgumentException("Этот урок создан другим учителем");
             }
         } else {
-            User teacher = viewer.getTeacher();
-            if (teacher == null || !lesson.getAuthor().getId().equals(teacher.getId())) {
-                throw new IllegalArgumentException("Урок недоступен: вы не прикреплены к его автору");
+            Long authorId = lesson.getAuthor().getId();
+            if (studentTeacherRepo.existsByStudentIdAndTeacherId(viewer.getId(), authorId)) {
+                // ok
+            } else {
+                User teacher = viewer.getTeacher();
+                if (teacher == null || !authorId.equals(teacher.getId())) {
+                    throw new IllegalArgumentException("Урок недоступен: вы не прикреплены к его автору");
+                }
             }
         }
         return lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId).stream()
@@ -120,7 +129,7 @@ public class TaskService {
         task.setTitle(req.title());
         task.setDescription(req.description());
         task.setDifficulty(req.difficulty() != null ? Difficulty.valueOf(req.difficulty()) : Difficulty.EASY);
-        task.setXpReward(req.xpReward() > 0 ? req.xpReward() : 10);
+        task.setXpReward(XpLimits.normalizeTaskXp(req.xpReward()));
         task.setTemplateCode(req.templateCode());
         task.setExpectedOutput(req.expectedOutput());
         task.setHints(req.hints());
@@ -139,7 +148,7 @@ public class TaskService {
         task.setTitle(req.title());
         task.setDescription(req.description());
         if (req.difficulty() != null) task.setDifficulty(Difficulty.valueOf(req.difficulty()));
-        if (req.xpReward() > 0) task.setXpReward(req.xpReward());
+        task.setXpReward(XpLimits.normalizeTaskXp(req.xpReward()));
         task.setTemplateCode(req.templateCode());
         task.setExpectedOutput(req.expectedOutput());
         task.setHints(req.hints());

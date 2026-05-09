@@ -18,4 +18,8 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
     List<Lesson> findByAuthorIdOrderByOrderIndexAsc(Long authorId);
 
     Optional<Lesson> findByAuthorIdAndOrderIndex(Long authorId, int orderIndex);
+
+    boolean existsByAuthorIdAndOrderIndex(Long authorId, int orderIndex);
+
+    boolean existsByAuthorIdAndOrderIndexAndIdNot(Long authorId, int orderIndex, Long id);
 }

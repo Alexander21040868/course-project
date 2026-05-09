@@ -3,6 +3,7 @@ package org.example.service;
 import org.example.dto.*;
 import org.example.entity.*;
 import org.example.repository.*;
+import org.example.util.XpLimits;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -63,7 +64,7 @@ public class ChallengeService {
         ch.setDescription(req.description());
         ch.setStartTime(req.startTime());
         ch.setEndTime(req.endTime());
-        ch.setBonusXp(req.bonusXp() > 0 ? req.bonusXp() : 50);
+        ch.setBonusXp(XpLimits.normalizeChallengeBonusXp(req.bonusXp()));
         ch.setCreatedBy(author);
         ch.setTasks(taskRepo.findAllById(req.taskIds()));
         challengeRepo.save(ch);
