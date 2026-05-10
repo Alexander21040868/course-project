@@ -5,11 +5,13 @@ import org.example.entity.*;
 import org.example.repository.*;
 import org.example.service.GamificationService;
 import org.example.service.LessonService;
+import org.example.service.TaskVisibilityService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -26,13 +28,15 @@ public class ProfileController {
     private final StudentTeacherRepository studentTeacherRepo;
     private final GamificationService gamificationService;
     private final LessonService lessonService;
+    private final TaskVisibilityService taskVisibility;
 
     public ProfileController(UserRepository userRepo, SubmissionRepository submissionRepo,
                              LessonRepository lessonRepo, TaskRepository taskRepo,
                              LessonTaskRepository lessonTaskRepo,
                              StudentTeacherRepository studentTeacherRepo,
                              GamificationService gamificationService,
-                             LessonService lessonService) {
+                             LessonService lessonService,
+                             TaskVisibilityService taskVisibility) {
         this.userRepo = userRepo;
         this.submissionRepo = submissionRepo;
         this.lessonRepo = lessonRepo;
@@ -41,6 +45,7 @@ public class ProfileController {
         this.studentTeacherRepo = studentTeacherRepo;
         this.gamificationService = gamificationService;
         this.lessonService = lessonService;
+        this.taskVisibility = taskVisibility;
     }
 
     @GetMapping("/my-teachers")
@@ -55,7 +60,7 @@ public class ProfileController {
 
         long solvedCount = submissionRepo.countDistinctTaskByUserIdAndStatus(
                 user.getId(), SubmissionStatus.CORRECT);
-        long totalTasks = taskRepo.count();
+        long totalTasks = taskRepo.countReleasedAt(LocalDateTime.now());
         List<AchievementDto> achievements = gamificationService.getUserAchievements(user.getId());
 
         List<LessonProgressDto> lessonsProgress = buildLessonsProgress(user);
@@ -99,8 +104,11 @@ public class ProfileController {
     }
 
     private LessonProgressDto lessonProgress(User user, Lesson lesson, String teacherUsername, int dungeonOrder) {
+        LocalDateTime now = LocalDateTime.now();
         List<Task> tasks = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId()).stream()
-                .map(LessonTask::getTask).toList();
+                .map(LessonTask::getTask)
+                .filter(t -> taskVisibility.canView(t, user, now, lesson))
+                .toList();
         List<TaskProgressDto> taskProgress = tasks.stream().map(t -> {
             boolean solved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
                     user.getId(), t.getId(), SubmissionStatus.CORRECT);

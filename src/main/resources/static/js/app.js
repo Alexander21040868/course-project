@@ -61,6 +61,39 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     const $ = id => document.getElementById(id);
 
+    function normalizeDatetimeLocalForApi(v) {
+        if (v == null) return null;
+        let s = String(v).trim();
+        if (!s) return null;
+        const junkYear = /^(\d{4})\d{2}-(\d{2}-\d{2}T\d{2}:\d{2})$/;
+        if (junkYear.test(s)) s = s.replace(junkYear, '$1-$2');
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s)) return s + ':00';
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(s)) return s.replace(/\.\d+/, '').slice(0, 19);
+        return s;
+    }
+
+    async function refreshTaskChallengeSelect(preferredId) {
+        const sel = $('taskChallengeSelect');
+        if (!sel) return;
+        const want = preferredId != null && preferredId !== '' ? String(preferredId) : sel.value;
+        try {
+            if (!state.profile) await loadProfile();
+            const me = state.profile && state.profile.username;
+            const list = await API.get('/admin/challenges') || [];
+            const now = Date.now();
+            const opts = ['<option value="">— нет —</option>'];
+            for (const c of list) {
+                if (!me || c.createdByName !== me) continue;
+                const endMs = c.endTime ? new Date(c.endTime).getTime() : NaN;
+                if (Number.isFinite(endMs) && endMs < now) continue;
+                opts.push(`<option value="${c.id}">${esc(c.title || '')} #${c.id}</option>`);
+            }
+            sel.innerHTML = opts.join('');
+            if (want && [...sel.options].some(o => o.value === want)) sel.value = want;
+            else sel.value = '';
+        } catch (e) { console.error(e); }
+    }
+
     function syncMuteBtn() {
         const b = $('muteBtn');
         if (b) b.textContent = CQSound.muted() ? '🔇 Тишина' : '🔊 Звук';
@@ -95,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.classList.add('active');
         $('atab-' + btn.dataset.atab).classList.add('active');
         if (btn.dataset.atab === 'students') loadGroup();
-        if (btn.dataset.atab === 'content') loadMyLessonsIndex();
+        if (btn.dataset.atab === 'content') { loadMyLessonsIndex(); refreshTaskChallengeSelect(); }
     }));
 
     let catalogTimer;
@@ -126,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (view === 'challenges') loadChallenges();
         if (view === 'leaderboard') loadLeaderboard();
         if (view === 'profile') loadFullProfile();
+        if (view === 'admin') { loadMyLessonsIndex(); refreshTaskChallengeSelect(); }
     }
 
     function showView(view) {
@@ -692,13 +726,13 @@ document.addEventListener('DOMContentLoaded', () => {
         el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
         try {
             const chs = await API.get('/challenges');
-            if (!chs.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚔</div><p>Нет активных челленджей.</p></div>'; return; }
+            if (!chs.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚔</div><p>Нет активных челленджей.</p></div>'; refreshNotifCount(); return; }
             el.innerHTML = chs.map(c => {
                 const status = c.active ? `⏱ Идёт • до ${formatMsk(c.endTime)} МСК`
                     : c.upcoming ? `🕒 Старт ${formatMsk(c.startTime)} МСК`
                     : '🏁 Завершён';
                 const cardClass = c.active ? 'active' : c.upcoming ? 'upcoming' : 'ended';
-                const canJoin = (c.active || c.upcoming) && !c.joined;
+                const canJoin = c.upcoming && !c.joined;
                 return `<div class="challenge-card ${cardClass}">
                     <div class="ch-header"><h3>${esc(c.title)}</h3><span class="ch-bonus">+${c.bonusXp} XP</span></div>
                     <p class="ch-desc">${esc(c.description || '')}</p>
@@ -706,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span>⚔ ${c.taskCount} задач</span>
                         <span>${status}</span>
                     </div>
+                    ${c.joined && c.taskIds && c.taskIds.length ? `<div class="ch-task-ids">Номера задач: ${c.taskIds.map(id => '#' + id).join(', ')}</div>` : ''}
                     <div class="ch-actions">
                         ${canJoin ? `<button class="btn-join" data-id="${c.id}">${c.upcoming ? 'Зарегистрироваться' : 'Вступить'}</button>` : ''}
                         ${c.joined ? '<span class="ch-joined">✓ Вы зарегистрированы</span>' : ''}
@@ -714,6 +749,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="ch-results" id="ch-results-${c.id}" style="display:none"></div>
                 </div>`;
             }).join('');
+            refreshNotifCount();
             el.querySelectorAll('.btn-join').forEach(b => b.addEventListener('click', async () => {
                 try { await API.post('/challenges/' + b.dataset.id + '/join', {}); loadChallenges(); } catch(e) { alert(e.message); }
             }));
@@ -1062,12 +1098,19 @@ document.addEventListener('DOMContentLoaded', () => {
             renderTaskExamplesFromApi(d.examples);
             $('editTaskId').value = String(d.id);
             $('taskFormSubmitBtn').textContent = 'Сохранить задачу';
+            const tcr = $('taskChallengeRow');
+            if (tcr) tcr.style.display = 'none';
         } catch (err) { alert(err.message); }
     });
     $('clearTaskEditBtn')?.addEventListener('click', () => {
         $('createTaskForm').reset();
         $('editTaskId').value = '';
         $('loadTaskId').value = '';
+        const tcs = $('taskChallengeSelect');
+        if (tcs) tcs.value = '';
+        const tcr = $('taskChallengeRow');
+        if (tcr) tcr.style.display = '';
+        refreshTaskChallengeSelect();
         resetTaskExamples();
         $('taskFormSubmitBtn').textContent = 'Создать задачу';
     });
@@ -1189,6 +1232,10 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         const fd = new FormData(e.target);
         const testCases = collectTaskExamplesForApi();
+        const tid = $('editTaskId').value;
+        const chEl = formField($('createTaskForm'), 'challengeId');
+        const rawCh = chEl && chEl.value ? +chEl.value : NaN;
+        const challengeId = !tid && Number.isFinite(rawCh) && rawCh > 0 ? rawCh : null;
         const body = {
             title: fd.get('title'),
             description: fd.get('description'),
@@ -1198,7 +1245,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hints: fd.get('hints'),
             testCases: testCases.length ? testCases : null
         };
-        const tid = $('editTaskId').value;
+        if (challengeId != null) body.challengeId = challengeId;
         try {
             const saved = tid
                 ? await API.put('/admin/tasks/' + tid, body)
@@ -1220,9 +1267,11 @@ document.addEventListener('DOMContentLoaded', () => {
     $('createChallengeForm').addEventListener('submit', async e => {
         e.preventDefault(); const fd = new FormData(e.target);
         try {
-            const ids = fd.get('taskIds').split(',').map(s => +s.trim()).filter(n => n > 0);
-            await API.post('/admin/challenges', { title: fd.get('title'), description: fd.get('description'), startTime: fd.get('startTime'), endTime: fd.get('endTime'), bonusXp: +fd.get('bonusXp'), taskIds: ids });
+            const startTime = normalizeDatetimeLocalForApi(fd.get('startTime'));
+            const endTime = normalizeDatetimeLocalForApi(fd.get('endTime'));
+            await API.post('/admin/challenges', { title: fd.get('title'), description: fd.get('description'), startTime, endTime, bonusXp: +fd.get('bonusXp') });
             e.target.reset(); showToast('🏟','Челлендж создан','');
+            refreshTaskChallengeSelect();
         } catch(err) { alert(err.message); }
     });
     $('createArticleForm').addEventListener('submit', async e => {

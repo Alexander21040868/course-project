@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,11 +28,17 @@ public class TaskService {
     private final LessonTaskRepository lessonTaskRepo;
     private final LessonRepository lessonRepo;
     private final StudentTeacherRepository studentTeacherRepo;
+    private final ChallengeRepository challengeRepo;
+    private final ChallengeService challengeService;
+    private final TaskVisibilityService taskVisibility;
 
     public TaskService(TaskRepository taskRepo, SubmissionRepository submissionRepo,
                        UserRepository userRepo, TestCaseRepository testCaseRepo,
                        LessonTaskRepository lessonTaskRepo, LessonRepository lessonRepo,
-                       StudentTeacherRepository studentTeacherRepo) {
+                       StudentTeacherRepository studentTeacherRepo,
+                       ChallengeRepository challengeRepo,
+                       ChallengeService challengeService,
+                       TaskVisibilityService taskVisibility) {
         this.taskRepo = taskRepo;
         this.submissionRepo = submissionRepo;
         this.userRepo = userRepo;
@@ -39,24 +46,34 @@ public class TaskService {
         this.lessonTaskRepo = lessonTaskRepo;
         this.lessonRepo = lessonRepo;
         this.studentTeacherRepo = studentTeacherRepo;
+        this.challengeRepo = challengeRepo;
+        this.challengeService = challengeService;
+        this.taskVisibility = taskVisibility;
     }
 
     public Page<TaskDto> findPage(String search, String username, int page, int size) {
-        Long userId = resolveUserId(username);
+        User viewer = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        long vid = viewer.getId();
+        LocalDateTime now = LocalDateTime.now();
         var p = PageRequest.of(page, size);
         if (search != null && !search.isBlank()) {
             String t = search.trim();
             Optional<Long> byId = parseNumericIdQuery(t);
             if (byId.isPresent()) {
-                if (page > 0) return Page.<TaskDto>empty(p);
-                return taskRepo.findById(byId.get())
-                        .map(task -> (Page<TaskDto>) new PageImpl<>(List.of(toDto(task, userId)), p, 1))
-                        .orElseGet(() -> Page.<TaskDto>empty(p));
+                if (page > 0) {
+                    return Page.<TaskDto>empty(p);
+                }
+                Optional<Task> hit = taskRepo.findById(byId.get())
+                        .filter(task -> taskVisibility.canView(task, viewer, now, null));
+                if (hit.isPresent()) {
+                    return new PageImpl<>(List.of(toDto(hit.get(), vid)), p, 1);
+                }
+                return Page.<TaskDto>empty(p);
             }
-            return taskRepo.findByTitleContainingIgnoreCaseOrderByIdAsc(t, p)
-                    .map(task -> toDto(task, userId));
+            return taskRepo.searchCatalog(t, now, vid, p).map(task -> toDto(task, vid));
         }
-        return taskRepo.findAllByOrderByIdAsc(p).map(task -> toDto(task, userId));
+        return taskRepo.pageCatalog(now, vid, p).map(task -> toDto(task, vid));
     }
 
     private static Optional<Long> parseNumericIdQuery(String trimmed) {
@@ -79,25 +96,47 @@ public class TaskService {
             }
         } else {
             Long authorId = lesson.getAuthor().getId();
-            if (studentTeacherRepo.existsByStudentIdAndTeacherId(viewer.getId(), authorId)) {
-                // ok
-            } else {
+            if (!studentTeacherRepo.existsByStudentIdAndTeacherId(viewer.getId(), authorId)) {
                 User teacher = viewer.getTeacher();
                 if (teacher == null || !authorId.equals(teacher.getId())) {
                     throw new IllegalArgumentException("Урок недоступен: вы не прикреплены к его автору");
                 }
             }
         }
+        LocalDateTime now = LocalDateTime.now();
         return lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lessonId).stream()
-                .map(lt -> toDto(lt.getTask(), viewer.getId()))
+                .map(LessonTask::getTask)
+                .filter(task -> taskVisibility.canView(task, viewer, now, lesson))
+                .map(task -> toDto(task, viewer.getId()))
                 .toList();
     }
 
     public TaskDto findById(Long id, String username) {
-        Long userId = resolveUserId(username);
+        User viewer = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        Task task = loadVisibleTask(id, viewer);
+        return toDto(task, viewer.getId());
+    }
+
+    public Task requireTaskForLearner(Long id, String username) {
+        User viewer = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        return loadVisibleTask(id, viewer);
+    }
+
+    public void assertCanSubmit(Task task, User user) {
+        if (!taskVisibility.canView(task, user, LocalDateTime.now(), null)) {
+            throw new IllegalArgumentException("Задача недоступна");
+        }
+    }
+
+    private Task loadVisibleTask(Long id, User viewer) {
         Task task = taskRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
-        return toDto(task, userId);
+        if (!taskVisibility.canView(task, viewer, LocalDateTime.now(), null)) {
+            throw new IllegalArgumentException("Задача не найдена");
+        }
+        return task;
     }
 
     public TaskEditDto findForEdit(Long id) {
@@ -116,6 +155,7 @@ public class TaskService {
                 t.getExpectedOutput(),
                 t.getHints(),
                 t.getAuthor() != null ? t.getAuthor().getUsername() : null,
+                challengeService.linkedChallengeId(id),
                 examples
         );
     }
@@ -134,9 +174,17 @@ public class TaskService {
         task.setExpectedOutput(req.expectedOutput());
         task.setHints(req.hints());
         task.setAuthor(author);
+        if (req.challengeId() != null) {
+            Challenge ch = challengeRepo.findById(req.challengeId())
+                    .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден"));
+            task.setCatalogVisibleFrom(ch.getStartTime());
+        }
         taskRepo.save(task);
 
         saveTestCases(task, req.testCases());
+        if (req.challengeId() != null) {
+            challengeService.attachTask(req.challengeId(), task.getId(), authorUsername);
+        }
 
         return toDto(task, null);
     }
@@ -179,12 +227,6 @@ public class TaskService {
             tc.setOrderIndex(idx++);
             testCaseRepo.save(tc);
         }
-    }
-
-    private Long resolveUserId(String username) {
-        return userRepo.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"))
-                .getId();
     }
 
     private TaskDto toDto(Task t, Long userId) {

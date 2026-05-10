@@ -3,34 +3,31 @@ package org.example.service;
 import org.example.dto.HintRequest;
 import org.example.dto.HintResponse;
 import org.example.entity.Task;
-import org.example.repository.TaskRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 @Service
 @Transactional(readOnly = true)
 public class CodeHintService {
 
-    private final Function<Long, Optional<Task>> findTaskById;
+    private final BiFunction<Long, String, Task> resolveTask;
 
     @Autowired
-    public CodeHintService(TaskRepository taskRepo) {
-        this(taskRepo::findById);
+    public CodeHintService(TaskService taskService) {
+        this.resolveTask = taskService::requireTaskForLearner;
     }
 
-    CodeHintService(Function<Long, Optional<Task>> findTaskById) {
-        this.findTaskById = findTaskById;
+    CodeHintService(BiFunction<Long, String, Task> resolveTask) {
+        this.resolveTask = resolveTask;
     }
 
-    public HintResponse hint(HintRequest req) {
-        Task task = findTaskById.apply(req.taskId())
-                .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+    public HintResponse hint(HintRequest req, String username) {
+        Task task = resolveTask.apply(req.taskId(), username);
         String code = req.code() == null ? "" : req.code();
         String out = req.output() == null ? "" : req.output().toLowerCase();
 

@@ -1,6 +1,7 @@
 package org.example.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "tasks")
@@ -37,6 +38,9 @@ public class Task {
     @JoinColumn(name = "author_id")
     private User author;
 
+    @Column(name = "catalog_visible_from")
+    private LocalDateTime catalogVisibleFrom;
+
     public Long getId() { return id; }
 
     public String getTitle() { return title; }
@@ -62,4 +66,9 @@ public class Task {
 
     public User getAuthor() { return author; }
     public void setAuthor(User author) { this.author = author; }
+
+    public LocalDateTime getCatalogVisibleFrom() { return catalogVisibleFrom; }
+    public void setCatalogVisibleFrom(LocalDateTime catalogVisibleFrom) {
+        this.catalogVisibleFrom = catalogVisibleFrom;
+    }
 }

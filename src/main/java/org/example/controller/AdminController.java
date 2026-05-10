@@ -117,6 +117,11 @@ public class AdminController {
         return ResponseEntity.ok(challengeService.create(req, principal.getName()));
     }
 
+    @GetMapping("/challenges")
+    public ResponseEntity<List<ChallengeDto>> listChallenges(Principal principal) {
+        return ResponseEntity.ok(challengeService.findAll(principal.getName()));
+    }
+
     @GetMapping("/students")
     public ResponseEntity<List<StudentProgressDto>> getStudentsProgress(Principal principal) {
         return ResponseEntity.ok(studentProgressService.listGroup(principal.getName()));

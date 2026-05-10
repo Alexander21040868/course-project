@@ -6,6 +6,7 @@ import org.example.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -19,11 +20,13 @@ public class StudentProgressService {
     private final GroupInviteRepository inviteRepo;
     private final LessonTaskRepository lessonTaskRepo;
     private final StudentTeacherRepository studentTeacherRepo;
+    private final TaskVisibilityService taskVisibility;
 
     public StudentProgressService(UserRepository userRepo, TaskRepository taskRepo,
                                   LessonRepository lessonRepo, SubmissionRepository submissionRepo,
                                   GroupInviteRepository inviteRepo, LessonTaskRepository lessonTaskRepo,
-                                  StudentTeacherRepository studentTeacherRepo) {
+                                  StudentTeacherRepository studentTeacherRepo,
+                                  TaskVisibilityService taskVisibility) {
         this.userRepo = userRepo;
         this.taskRepo = taskRepo;
         this.lessonRepo = lessonRepo;
@@ -31,11 +34,12 @@ public class StudentProgressService {
         this.inviteRepo = inviteRepo;
         this.lessonTaskRepo = lessonTaskRepo;
         this.studentTeacherRepo = studentTeacherRepo;
+        this.taskVisibility = taskVisibility;
     }
 
     public List<StudentProgressDto> listGroup(String teacherUsername) {
         User teacher = requireTeacher(teacherUsername);
-        long totalTasks = taskRepo.count();
+        long totalTasks = taskRepo.countReleasedAt(LocalDateTime.now());
         return studentTeacherRepo.findStudentsByTeacherId(teacher.getId(), Role.STUDENT).stream()
                 .map(u -> {
                     long solved = submissionRepo.countDistinctTaskByUserIdAndStatus(
@@ -79,8 +83,11 @@ public class StudentProgressService {
 
         List<LessonProgressDto> lessons = lessonRepo.findByAuthorIdOrderByOrderIndexAsc(teacher.getId()).stream()
                 .map(lesson -> {
+                    LocalDateTime now = LocalDateTime.now();
                     List<Task> tasks = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId()).stream()
-                            .map(LessonTask::getTask).toList();
+                            .map(LessonTask::getTask)
+                            .filter(t -> taskVisibility.canView(t, user, now, lesson))
+                            .toList();
                     List<TaskProgressDto> taskProgress = tasks.stream().map(t -> {
                         boolean solved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
                                 user.getId(), t.getId(), SubmissionStatus.CORRECT);

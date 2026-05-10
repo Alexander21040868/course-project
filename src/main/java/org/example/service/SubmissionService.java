@@ -25,12 +25,16 @@ public class SubmissionService {
     private final GamificationService gamificationService;
     private final DockerCExecutionService cExec;
     private final DailyTaskService dailyTaskService;
+    private final TaskService taskService;
+    private final ChallengeService challengeService;
 
     public SubmissionService(SubmissionRepository submissionRepo, TaskRepository taskRepo,
                              UserRepository userRepo, TestCaseRepository testCaseRepo,
                              GamificationService gamificationService,
                              DockerCExecutionService cExec,
-                             DailyTaskService dailyTaskService) {
+                             DailyTaskService dailyTaskService,
+                             TaskService taskService,
+                             ChallengeService challengeService) {
         this.submissionRepo = submissionRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
@@ -38,6 +42,8 @@ public class SubmissionService {
         this.gamificationService = gamificationService;
         this.cExec = cExec;
         this.dailyTaskService = dailyTaskService;
+        this.taskService = taskService;
+        this.challengeService = challengeService;
     }
 
     @Transactional
@@ -46,6 +52,7 @@ public class SubmissionService {
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
         Task task = taskRepo.findById(req.taskId())
                 .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+        taskService.assertCanSubmit(task, user);
 
         boolean alreadySolved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
                 user.getId(), task.getId(), SubmissionStatus.CORRECT);
@@ -105,6 +112,7 @@ public class SubmissionService {
                 if (dailyTaskService.isDailyTask(task.getId())) {
                     reward *= 2;
                 }
+                reward += challengeService.challengeBonusShareForFirstSolve(task, user);
                 xpEarned = gamificationService.addXp(user, reward);
                 newAchievements = gamificationService.checkAndGrantAchievements(user);
             }
@@ -124,6 +132,7 @@ public class SubmissionService {
     public List<SubmissionHistoryDto> getTaskHistory(Long taskId, String username) {
         User user = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        taskService.requireTaskForLearner(taskId, username);
         return submissionRepo.findByUserIdAndTaskIdOrderBySubmittedAtDesc(user.getId(), taskId)
                 .stream()
                 .map(s -> new SubmissionHistoryDto(s.getId(), s.getTask().getTitle(),

@@ -835,6 +835,7 @@ image.png
 .ch-bonus { font-family: var(--pixel); font-size: 10px; color: var(--gold); }
 .ch-desc { font-size: 12px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.5; }
 .ch-meta { display: flex; gap: 16px; font-size: 11px; color: var(--text-dim); margin-bottom: 14px; }
+.ch-task-ids { font-size: 11px; color: var(--text-dim); margin: -8px 0 14px; line-height: 1.45; }
 .ch-actions { display: flex; gap: 10px; align-items: center; }
 .btn-join { padding: 8px 18px; background: linear-gradient(135deg, var(--orange), #cc5520); color: #fff; border: none; border-radius: 6px; font-family: var(--pixel); font-size: 9px; cursor: pointer; }
 .btn-join:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,107,43,.3); }

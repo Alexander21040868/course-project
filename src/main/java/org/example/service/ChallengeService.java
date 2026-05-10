@@ -43,14 +43,14 @@ public class ChallengeService {
     public List<ChallengeDto> findActive(String username) {
         Long userId = userRepo.findByUsername(username).map(User::getId).orElse(null);
         LocalDateTime now = LocalDateTime.now();
-        return challengeRepo.findByEndTimeAfterOrderByStartTimeAsc(now).stream()
+        return challengeRepo.findForArena(now).stream()
                 .map(c -> toDto(c, userId, now)).toList();
     }
 
     public List<ChallengeDto> findAll(String username) {
         Long userId = userRepo.findByUsername(username).map(User::getId).orElse(null);
         LocalDateTime now = LocalDateTime.now();
-        return challengeRepo.findAllByOrderByCreatedAtDesc().stream()
+        return challengeRepo.findAllForAdmin().stream()
                 .map(c -> toDto(c, userId, now)).toList();
     }
 
@@ -58,6 +58,9 @@ public class ChallengeService {
     public ChallengeDto create(ChallengeCreateRequest req, String username) {
         User author = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        if (!req.startTime().isBefore(req.endTime())) {
+            throw new IllegalArgumentException("Время окончания должно быть позже старта");
+        }
 
         Challenge ch = new Challenge();
         ch.setTitle(req.title());
@@ -66,7 +69,7 @@ public class ChallengeService {
         ch.setEndTime(req.endTime());
         ch.setBonusXp(XpLimits.normalizeChallengeBonusXp(req.bonusXp()));
         ch.setCreatedBy(author);
-        ch.setTasks(taskRepo.findAllById(req.taskIds()));
+        ch.setTasks(new ArrayList<>());
         challengeRepo.save(ch);
         log.info("Челлендж создан: id={} «{}»", ch.getId(), ch.getTitle());
         notificationService.notifyAllStudents("Новый челлендж", ch.getTitle());
@@ -75,13 +78,98 @@ public class ChallengeService {
     }
 
     @Transactional(readOnly = false)
+    public void deleteStartedChallengesWithNoTasks() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Challenge> doomed = challengeRepo.findStartedWithNoTasks(now);
+        for (Challenge c : doomed) {
+            log.info("Удалён пустой челлендж (наступил старт без задач): id={} «{}»", c.getId(), c.getTitle());
+            challengeRepo.delete(c);
+        }
+    }
+
+    @Transactional(readOnly = false)
+    public void attachTask(long challengeId, long taskId, String username) {
+        User actor = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        Challenge ch = challengeRepo.findById(challengeId)
+                .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден"));
+        if (!ch.getCreatedBy().getId().equals(actor.getId())) {
+            throw new IllegalArgumentException("Добавлять задачи в соревнование может только его создатель");
+        }
+        if (LocalDateTime.now().isAfter(ch.getEndTime())) {
+            throw new IllegalArgumentException("Челлендж уже завершён");
+        }
+        Task task = taskRepo.findById(taskId)
+                .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+        Optional<Challenge> existing = challengeRepo.findFirstByTaskId(taskId);
+        if (existing.isPresent()) {
+            if (existing.get().getId().equals(challengeId)) {
+                return;
+            }
+            throw new IllegalArgumentException("Задача «" + task.getTitle() + "» уже в другом челлендже");
+        }
+        ensureTaskEligibleForChallenge(task, LocalDateTime.now());
+        task.setCatalogVisibleFrom(ch.getStartTime());
+        taskRepo.save(task);
+        ch.getTasks().add(task);
+        challengeRepo.save(ch);
+    }
+
+    public Long linkedChallengeId(long taskId) {
+        return challengeRepo.findFirstByTaskId(taskId).map(Challenge::getId).orElse(null);
+    }
+
+    private void ensureTaskEligibleForChallenge(Task t, LocalDateTime now) {
+        if (challengeRepo.existsWithTaskId(t.getId())) {
+            throw new IllegalArgumentException("Задача «" + t.getTitle() + "» уже привязана к челленджу");
+        }
+        LocalDateTime cvf = t.getCatalogVisibleFrom();
+        if (cvf == null) {
+            if (submissionRepo.existsByTaskIdAndStatus(t.getId(), SubmissionStatus.CORRECT)) {
+                throw new IllegalArgumentException(
+                        "Задачу «" + t.getTitle() + "» уже решали — её нельзя закрыть под соревнование");
+            }
+        } else if (!now.isBefore(cvf)) {
+            throw new IllegalArgumentException(
+                    "Задача «" + t.getTitle() + "» уже в открытом каталоге");
+        }
+    }
+
+    public int challengeBonusShareForFirstSolve(Task task, User user) {
+        LocalDateTime now = LocalDateTime.now();
+        Challenge ch = challengeRepo.findActiveCoveringTask(task.getId(), now).orElse(null);
+        if (ch == null) {
+            return 0;
+        }
+        if (!participantRepo.existsByChallengeIdAndUserId(ch.getId(), user.getId())) {
+            return 0;
+        }
+        List<Long> sortedIds = ch.getTasks().stream().map(Task::getId).sorted().toList();
+        int n = sortedIds.size();
+        if (n == 0) {
+            return 0;
+        }
+        int pos = sortedIds.indexOf(task.getId());
+        if (pos < 0) {
+            return 0;
+        }
+        int base = ch.getBonusXp() / n;
+        int rem = ch.getBonusXp() % n;
+        return base + (pos < rem ? 1 : 0);
+    }
+
+    @Transactional(readOnly = false)
     public void join(Long challengeId, String username) {
         User user = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
         Challenge ch = challengeRepo.findById(challengeId)
                 .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден"));
-        if (LocalDateTime.now().isAfter(ch.getEndTime())) {
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isAfter(ch.getEndTime())) {
             throw new IllegalArgumentException("Челлендж уже завершён");
+        }
+        if (!now.isBefore(ch.getStartTime())) {
+            throw new IllegalArgumentException("Регистрация закрыта: челлендж уже начался");
         }
         if (participantRepo.existsByChallengeIdAndUserId(challengeId, user.getId()))
             throw new IllegalArgumentException("Вы уже участвуете");
@@ -92,10 +180,20 @@ public class ChallengeService {
         participantRepo.save(cp);
     }
 
-    @Transactional
-    public List<ChallengeResultDto> getResults(Long challengeId) {
-        Challenge ch = challengeRepo.findById(challengeId)
-                .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден"));
+    @Transactional(readOnly = false)
+    public void finalizeEndedUnratedChallenges() {
+        LocalDateTime now = LocalDateTime.now();
+        for (Long id : challengeRepo.findIdsUnratedEnded(now)) {
+            finalizeChallengeById(id);
+        }
+    }
+
+    @Transactional(readOnly = false)
+    public void finalizeChallengeById(long challengeId) {
+        Challenge ch = challengeRepo.findDetailById(challengeId).orElse(null);
+        if (ch == null || ch.isRated()) return;
+        LocalDateTime now = LocalDateTime.now();
+        if (!now.isAfter(ch.getEndTime())) return;
 
         List<Long> taskIds = ch.getTasks().stream().map(Task::getId).toList();
         List<ChallengeParticipant> participants =
@@ -116,17 +214,56 @@ public class ChallengeService {
         standings.sort((a, b) -> Long.compare(b[2], a[2]));
 
         Map<Long, Integer> deltas = standings.size() >= 2
-                ? calculateEloDeltas(standings) : Map.of();
+                ? calculateEloDeltas(standings) : new HashMap<>();
 
-        boolean ended = LocalDateTime.now().isAfter(ch.getEndTime());
-        if (ended && !ch.isRated() && !deltas.isEmpty()) {
-            for (var entry : standings) {
-                User u = userMap.get(entry[0]);
-                u.setRating(Math.max(0, u.getRating() + deltas.getOrDefault(u.getId(), 0)));
+        if (!deltas.isEmpty()) {
+            for (long[] row : standings) {
+                User u = userMap.get(row[0]);
+                int d = deltas.getOrDefault(u.getId(), 0);
+                u.setRating(Math.max(0, u.getRating() + d));
                 userRepo.save(u);
             }
-            ch.setRated(true);
-            challengeRepo.save(ch);
+        }
+        for (ChallengeParticipant cp : participants) {
+            cp.setEloDelta(deltas.getOrDefault(cp.getUser().getId(), 0));
+            participantRepo.save(cp);
+        }
+        ch.setRated(true);
+        challengeRepo.save(ch);
+        notifyChallengeEnded(standings, userMap, deltas, ch.getTitle(), ch);
+    }
+
+    @Transactional(readOnly = false)
+    public List<ChallengeResultDto> getResults(Long challengeId) {
+        finalizeChallengeById(challengeId);
+        Challenge ch = challengeRepo.findDetailById(challengeId)
+                .orElseThrow(() -> new IllegalArgumentException("Челлендж не найден"));
+        List<Long> taskIds = ch.getTasks().stream().map(Task::getId).toList();
+        List<ChallengeParticipant> participants =
+                participantRepo.findByChallengeIdOrderByTasksSolvedDesc(challengeId);
+
+        List<long[]> standings = new ArrayList<>();
+        Map<Long, User> userMap = new HashMap<>();
+
+        for (ChallengeParticipant cp : participants) {
+            User u = cp.getUser();
+            int solved = 0;
+            for (Long tid : taskIds)
+                if (submissionRepo.existsByUserIdAndTaskIdAndStatus(u.getId(), tid, SubmissionStatus.CORRECT))
+                    solved++;
+            standings.add(new long[]{u.getId(), u.getRating(), solved});
+            userMap.put(u.getId(), u);
+        }
+        standings.sort((a, b) -> Long.compare(b[2], a[2]));
+
+        Map<Long, Integer> deltas;
+        if (ch.isRated()) {
+            deltas = new HashMap<>();
+            for (ChallengeParticipant cp : participants) {
+                deltas.put(cp.getUser().getId(), cp.getEloDelta());
+            }
+        } else {
+            deltas = standings.size() >= 2 ? calculateEloDeltas(standings) : new HashMap<>();
         }
 
         AtomicInteger rank = new AtomicInteger(1);
@@ -154,13 +291,63 @@ public class ChallengeService {
         return deltas;
     }
 
+    private int contestXpEarned(Challenge ch, User user) {
+        LocalDateTime start = ch.getStartTime();
+        LocalDateTime end = ch.getEndTime();
+        List<Long> sortedIds = ch.getTasks().stream().map(Task::getId).sorted().toList();
+        int n = sortedIds.size();
+        if (n == 0) return 0;
+        int bonusBase = ch.getBonusXp() / n;
+        int bonusRem = ch.getBonusXp() % n;
+        Map<Long, Task> byId = new HashMap<>();
+        for (Task t : ch.getTasks()) {
+            byId.put(t.getId(), t);
+        }
+        int total = 0;
+        for (int pos = 0; pos < sortedIds.size(); pos++) {
+            Long tid = sortedIds.get(pos);
+            List<Submission> subs = submissionRepo.findByUserAndTaskAndStatusOrderBySubmittedAtAsc(
+                    user.getId(), tid, SubmissionStatus.CORRECT);
+            if (subs.isEmpty()) continue;
+            Submission first = subs.get(0);
+            LocalDateTime ts = first.getSubmittedAt();
+            if (ts.isBefore(start) || ts.isAfter(end)) continue;
+            Task task = byId.get(tid);
+            if (task == null) continue;
+            int share = bonusBase + (pos < bonusRem ? 1 : 0);
+            total += task.getXpReward() + share;
+        }
+        return total;
+    }
+
+    private void notifyChallengeEnded(List<long[]> standings, Map<Long, User> userMap,
+                                      Map<Long, Integer> deltas, String title, Challenge ch) {
+        String head = "«" + title + "»: итоги";
+        for (long[] row : standings) {
+            User u = userMap.get(row[0]);
+            int d = deltas.getOrDefault(u.getId(), 0);
+            int xp = contestXpEarned(ch, u);
+            int newR = u.getRating();
+            int oldR = newR - d;
+            String eloLine = d == 0
+                    ? "Эло без изменений"
+                    : String.format("Эло %+d (%d → %d)", d, oldR, newR);
+            notificationService.notifyUser(u.getId(), head,
+                    eloLine + ". Опыт по задачам соревнования: " + xp + " XP.");
+        }
+    }
+
     private ChallengeDto toDto(Challenge c, Long userId, LocalDateTime now) {
         boolean joined = userId != null &&
                 participantRepo.existsByChallengeIdAndUserId(c.getId(), userId);
-        boolean active = now.isAfter(c.getStartTime()) && now.isBefore(c.getEndTime());
+        boolean active = !now.isBefore(c.getStartTime()) && !now.isAfter(c.getEndTime());
         boolean upcoming = now.isBefore(c.getStartTime());
+        List<Long> taskIds = List.of();
+        if (userId != null && participantRepo.existsByChallengeIdAndUserId(c.getId(), userId)) {
+            taskIds = c.getTasks().stream().map(Task::getId).sorted().toList();
+        }
         return new ChallengeDto(c.getId(), c.getTitle(), c.getDescription(),
                 c.getStartTime(), c.getEndTime(), c.getBonusXp(),
-                c.getCreatedBy().getUsername(), c.getTasks().size(), joined, active, upcoming);
+                c.getCreatedBy().getUsername(), c.getTasks().size(), joined, active, upcoming, taskIds);
     }
 }

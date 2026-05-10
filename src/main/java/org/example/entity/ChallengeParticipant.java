@@ -26,6 +26,9 @@ public class ChallengeParticipant {
     @Column(name = "tasks_solved", nullable = false)
     private int tasksSolved = 0;
 
+    @Column(name = "elo_delta", nullable = false)
+    private int eloDelta = 0;
+
     public Long getId() { return id; }
     public Challenge getChallenge() { return challenge; }
     public void setChallenge(Challenge challenge) { this.challenge = challenge; }
@@ -34,4 +37,6 @@ public class ChallengeParticipant {
     public LocalDateTime getJoinedAt() { return joinedAt; }
     public int getTasksSolved() { return tasksSolved; }
     public void setTasksSolved(int tasksSolved) { this.tasksSolved = tasksSolved; }
+    public int getEloDelta() { return eloDelta; }
+    public void setEloDelta(int eloDelta) { this.eloDelta = eloDelta; }
 }

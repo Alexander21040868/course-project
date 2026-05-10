@@ -224,6 +224,10 @@
                                 <button type="button" class="btn-admin btn-tc-add" id="addExampleBtn">+ пример</button>
                             </div>
                             <div><label>Подсказка</label><input type="text" name="hints" placeholder="Используйте printf()"></div>
+                            <div id="taskChallengeRow">
+                                <div><label>Челлендж</label><select id="taskChallengeSelect" name="challengeId"><option value="">— нет —</option></select></div>
+                                <p class="admin-tc-hint">Только при создании новой задачи. К уже существующим челлендж не подключается.</p>
+                            </div>
                             <button type="submit" class="btn-admin" id="taskFormSubmitBtn">Создать задачу</button>
                         </form>
                         <input type="hidden" id="editTaskId" value="" autocomplete="off">
@@ -272,7 +276,7 @@
                             <div><label>Начало</label><input type="datetime-local" name="startTime" required></div>
                             <div><label>Конец</label><input type="datetime-local" name="endTime" required></div>
                             <div><label>Бонус XP</label><input type="number" name="bonusXp" value="50" min="0" max="2000" title="0 — 50 по умолчанию, иначе 1–2000"></div>
-                            <div><label>ID задач (через запятую)</label><input type="text" name="taskIds" required placeholder="1,2,3"></div>
+                            <p class="admin-tc-hint">Задачи к соревнованию не цепляются списком id: добавьте их вручную в «Контент» — новая задача и выбор челленджа; после старта соревнования они попадают в общий каталог.</p>
                             <button type="submit" class="btn-admin">Создать челлендж</button>
                         </form>
                     </div>

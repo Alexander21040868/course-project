@@ -11,7 +11,8 @@ public record TaskCreateRequest(
         String templateCode,
         String expectedOutput,
         String hints,
-        List<TestCaseInput> testCases
+        List<TestCaseInput> testCases,
+        Long challengeId
 ) {
     public record TestCaseInput(String input, String expectedOutput, boolean sample) {}
 }

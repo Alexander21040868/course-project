@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,6 +23,7 @@ public class GamificationService {
     private final LessonRepository lessonRepo;
     private final LessonTaskRepository lessonTaskRepo;
     private final NotificationService notificationService;
+    private final TaskVisibilityService taskVisibility;
 
     public GamificationService(UserRepository userRepo,
                                AchievementRepository achievementRepo,
@@ -30,7 +32,8 @@ public class GamificationService {
                                TaskRepository taskRepo,
                                LessonRepository lessonRepo,
                                LessonTaskRepository lessonTaskRepo,
-                               NotificationService notificationService) {
+                               NotificationService notificationService,
+                               TaskVisibilityService taskVisibility) {
         this.userRepo = userRepo;
         this.achievementRepo = achievementRepo;
         this.userAchievementRepo = userAchievementRepo;
@@ -39,6 +42,7 @@ public class GamificationService {
         this.lessonRepo = lessonRepo;
         this.lessonTaskRepo = lessonTaskRepo;
         this.notificationService = notificationService;
+        this.taskVisibility = taskVisibility;
     }
 
     @Transactional
@@ -58,7 +62,7 @@ public class GamificationService {
         tryGrant(user, "SOLVER_10",   solved >= 10, earned);
         tryGrant(user, "SOLVER_50",   solved >= 50, earned);
 
-        long totalEasy = taskRepo.countByDifficulty(Difficulty.EASY);
+        long totalEasy = taskRepo.countReleasedByDifficulty(Difficulty.EASY, LocalDateTime.now());
         long solvedEasy = submissionRepo.findByUserIdOrderBySubmittedAtDesc(user.getId()).stream()
                 .filter(s -> s.getStatus() == SubmissionStatus.CORRECT
                         && s.getTask().getDifficulty() == Difficulty.EASY)
@@ -75,11 +79,19 @@ public class GamificationService {
     }
 
     private boolean hasAnyLessonCleared(Long userId) {
+        User user = userRepo.findById(userId).orElse(null);
+        if (user == null) return false;
+        LocalDateTime now = LocalDateTime.now();
         for (Lesson lesson : lessonRepo.findAll()) {
             var links = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId());
             if (links.isEmpty()) continue;
-            boolean allSolved = links.stream().allMatch(lt ->
-                    submissionRepo.existsByUserIdAndTaskIdAndStatus(userId, lt.getTask().getId(), SubmissionStatus.CORRECT));
+            var visible = links.stream()
+                    .map(LessonTask::getTask)
+                    .filter(t -> taskVisibility.canView(t, user, now, lesson))
+                    .toList();
+            if (visible.isEmpty()) continue;
+            boolean allSolved = visible.stream().allMatch(t ->
+                    submissionRepo.existsByUserIdAndTaskIdAndStatus(userId, t.getId(), SubmissionStatus.CORRECT));
             if (allSolved) return true;
         }
         return false;
