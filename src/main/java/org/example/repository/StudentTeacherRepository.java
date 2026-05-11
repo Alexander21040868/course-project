@@ -18,6 +18,7 @@ public interface StudentTeacherRepository extends JpaRepository<StudentTeacherLi
     @Query("select t from StudentTeacherLink st join User t on t.id = st.teacherId where st.studentId = :sid order by t.username asc")
     List<User> findTeachersByStudentId(@Param("sid") Long sid);
 
-    @Query("select s from StudentTeacherLink st join User s on s.id = st.studentId where st.teacherId = :tid and s.role = :studentRole order by s.username asc")
+    @Query("select distinct s from StudentTeacherLink st join User s on s.id = st.studentId "
+            + "left join fetch s.studyGroup where st.teacherId = :tid and s.role = :studentRole order by s.username asc")
     List<User> findStudentsByTeacherId(@Param("tid") Long tid, @Param("studentRole") Role studentRole);
 }

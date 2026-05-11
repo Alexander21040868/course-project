@@ -169,6 +169,15 @@ public class AdminController {
         return ResponseEntity.ok(studentProgressService.getDetail(id, principal.getName()));
     }
 
+    @GetMapping("/dungeons/{orderIndex}/progress")
+    public ResponseEntity<DungeonProgressSheetDto> dungeonProgress(@PathVariable("orderIndex") int orderIndex,
+            @RequestParam(value = "groupId", required = false) Long groupId,
+            @RequestParam(value = "ungrouped", required = false, defaultValue = "false") boolean ungrouped,
+            Principal principal) {
+        return ResponseEntity.ok(studentProgressService.dungeonProgressSheet(
+                orderIndex, groupId, ungrouped, principal.getName()));
+    }
+
     @GetMapping("/groups")
     public ResponseEntity<List<StudyGroupDto>> listGroups(Principal principal) {
         return ResponseEntity.ok(studyGroupService.listForTeacher(principal.getName()));

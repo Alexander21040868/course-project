@@ -836,6 +836,16 @@ image.png
 .ch-desc { font-size: 12px; color: var(--text-dim); margin-bottom: 12px; line-height: 1.5; }
 .ch-meta { display: flex; gap: 16px; font-size: 11px; color: var(--text-dim); margin-bottom: 14px; }
 .ch-task-ids { font-size: 11px; color: var(--text-dim); margin: -8px 0 14px; line-height: 1.45; }
+
+.dungeon-progress-row { flex-wrap: wrap; }
+.dungeon-matrix-wrap { overflow-x: auto; margin-top: 14px; max-width: 100%; border-radius: 8px; }
+.dungeon-matrix { font-size: 10px; }
+.dungeon-matrix th, .dungeon-matrix td { text-align: center; padding: 6px 8px; white-space: nowrap; vertical-align: middle; }
+.dungeon-matrix .dm-name-col, .dungeon-matrix .dm-name { text-align: left; position: sticky; left: 0; background: var(--panel, #1a1a24); z-index: 1; box-shadow: 4px 0 8px rgba(0,0,0,.15); }
+.dungeon-matrix .dm-ok { color: #6dca8a; font-weight: bold; }
+.dungeon-matrix .dm-no { color: var(--text-dim); }
+.dm-th-id { display: block; font-weight: 700; opacity: 0.9; }
+.dm-th-title { display: block; max-width: 96px; overflow: hidden; text-overflow: ellipsis; font-weight: 400; }
 .ch-actions { display: flex; gap: 10px; align-items: center; }
 .btn-join { padding: 8px 18px; background: linear-gradient(135deg, var(--orange), #cc5520); color: #fff; border: none; border-radius: 6px; font-family: var(--pixel); font-size: 9px; cursor: pointer; }
 .btn-join:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,107,43,.3); }

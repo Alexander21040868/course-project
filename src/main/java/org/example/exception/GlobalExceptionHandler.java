@@ -17,8 +17,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException e) {
+        String msg = e.getMessage();
+        if (msg == null || msg.isBlank()) {
+            msg = "Неверный запрос";
+        }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(Map.of("error", e.getMessage()));
+                .body(Map.of("error", msg));
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
@@ -35,7 +39,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleGeneral(Exception e) {
         log.error("Unhandled exception", e);
+        String detail = e.getMessage();
+        if (detail == null || detail.isBlank()) {
+            detail = e.getClass().getSimpleName();
+        }
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(Map.of("error", "Внутренняя ошибка сервера: " + e.getMessage()));
+                .body(Map.of("error", "Внутренняя ошибка сервера: " + detail));
     }
 }

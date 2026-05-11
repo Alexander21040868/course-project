@@ -255,6 +255,16 @@
                         <div id="myGroupTable"></div>
                     </div>
                     <div class="admin-section">
+                        <h3>🗺 Прогресс по подземелью</h3>
+                        <p class="admin-edit-hint">Выберите подгруппу (или всех / без подгруппы), затем подземелье — таблица покажет, какие задачи каждый ученик уже решил.</p>
+                        <div class="group-search-row dungeon-progress-row">
+                            <select id="dungeonProgressGroup"><option value="">Все подгруппы</option><option value="__none__">Без подгруппы</option></select>
+                            <select id="dungeonProgressOrder"><option value="">Подземелье…</option></select>
+                            <button type="button" class="btn-admin" id="loadDungeonProgressBtn">Показать</button>
+                        </div>
+                        <div id="dungeonProgressTable"></div>
+                    </div>
+                    <div class="admin-section">
                         <h3>➕ Пригласить ученика в группу</h3>
                         <p class="admin-edit-hint">Ученик получит уведомление и сможет принять или отклонить приглашение.</p>
                         <div class="group-search-row">

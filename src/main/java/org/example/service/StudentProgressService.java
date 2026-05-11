@@ -7,7 +7,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -21,12 +25,14 @@ public class StudentProgressService {
     private final LessonTaskRepository lessonTaskRepo;
     private final StudentTeacherRepository studentTeacherRepo;
     private final TaskVisibilityService taskVisibility;
+    private final StudyGroupRepository studyGroupRepo;
 
     public StudentProgressService(UserRepository userRepo, TaskRepository taskRepo,
                                   LessonRepository lessonRepo, SubmissionRepository submissionRepo,
                                   GroupInviteRepository inviteRepo, LessonTaskRepository lessonTaskRepo,
                                   StudentTeacherRepository studentTeacherRepo,
-                                  TaskVisibilityService taskVisibility) {
+                                  TaskVisibilityService taskVisibility,
+                                  StudyGroupRepository studyGroupRepo) {
         this.userRepo = userRepo;
         this.taskRepo = taskRepo;
         this.lessonRepo = lessonRepo;
@@ -35,6 +41,7 @@ public class StudentProgressService {
         this.lessonTaskRepo = lessonTaskRepo;
         this.studentTeacherRepo = studentTeacherRepo;
         this.taskVisibility = taskVisibility;
+        this.studyGroupRepo = studyGroupRepo;
     }
 
     public List<StudentProgressDto> listGroup(String teacherUsername) {
@@ -104,6 +111,75 @@ public class StudentProgressService {
         return new StudentDetailDto(
                 user.getId(), user.getUsername(), user.getXp(), user.getLevel(),
                 totalSolved, lessons);
+    }
+
+    public DungeonProgressSheetDto dungeonProgressSheet(int orderIndex, Long groupId, boolean ungrouped,
+                                                        String teacherUsername) {
+        User teacher = requireTeacher(teacherUsername);
+        Lesson lesson = lessonRepo.findByAuthorIdAndOrderIndex(teacher.getId(), orderIndex)
+                .orElseThrow(() -> new IllegalArgumentException("Подземелье не найдено"));
+
+        if (groupId != null) {
+            studyGroupRepo.findByIdAndTeacherId(groupId, teacher.getId())
+                    .orElseThrow(() -> new IllegalArgumentException("Подгруппа не найдена"));
+        }
+
+        List<Task> tasks = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId()).stream()
+                .map(LessonTask::getTask)
+                .filter(Objects::nonNull)
+                .filter(t -> t.getId() != null)
+                .toList();
+
+        List<User> students = studentTeacherRepo.findStudentsByTeacherId(teacher.getId(), Role.STUDENT).stream()
+                .filter(Objects::nonNull)
+                .filter(u -> u.getId() != null)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        if (ungrouped) {
+            students = students.stream()
+                    .filter(u -> u.getStudyGroup() == null)
+                    .collect(Collectors.toCollection(ArrayList::new));
+        } else if (groupId != null) {
+            students = students.stream()
+                    .filter(u -> {
+                        StudyGroup g = u.getStudyGroup();
+                        return g != null && groupId.equals(g.getId());
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+        }
+
+        students.sort(Comparator.comparing(
+                u -> u.getUsername() != null ? u.getUsername() : "",
+                String.CASE_INSENSITIVE_ORDER));
+
+        String emptyFilterHint = null;
+        if (students.isEmpty()) {
+            if (groupId != null) {
+                emptyFilterHint = "В выбранной подгруппе пока нет учеников.";
+            } else if (ungrouped) {
+                emptyFilterHint = "Нет учеников без подгруппы.";
+            } else {
+                emptyFilterHint = "В вашей группе пока нет учеников.";
+            }
+        }
+
+        List<DungeonTaskColumnDto> cols = tasks.stream()
+                .map(t -> new DungeonTaskColumnDto(t.getId(), t.getTitle() != null ? t.getTitle() : ""))
+                .toList();
+
+        List<DungeonStudentRowDto> rows = new ArrayList<>();
+        for (User u : students) {
+            Long uid = u.getId();
+            if (uid == null) continue;
+            List<Boolean> solved = new ArrayList<>();
+            for (Task t : tasks) {
+                Long tid = t.getId();
+                solved.add(tid != null && submissionRepo.existsByUserIdAndTaskIdAndStatus(
+                        uid, tid, SubmissionStatus.CORRECT));
+            }
+            rows.add(new DungeonStudentRowDto(uid, u.getUsername() != null ? u.getUsername() : "", solved));
+        }
+        return new DungeonProgressSheetDto(lesson.getOrderIndex(), lesson.getTitle(), cols, rows, emptyFilterHint);
     }
 
     @Transactional

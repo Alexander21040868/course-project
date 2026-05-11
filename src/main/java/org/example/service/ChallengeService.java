@@ -96,7 +96,11 @@ public class ChallengeService {
         if (!ch.getCreatedBy().getId().equals(actor.getId())) {
             throw new IllegalArgumentException("Добавлять задачи в соревнование может только его создатель");
         }
-        if (LocalDateTime.now().isAfter(ch.getEndTime())) {
+        LocalDateTime now = LocalDateTime.now();
+        if (!now.isBefore(ch.getStartTime())) {
+            throw new IllegalArgumentException("Нельзя добавлять задачи после начала соревнования");
+        }
+        if (now.isAfter(ch.getEndTime())) {
             throw new IllegalArgumentException("Челлендж уже завершён");
         }
         Task task = taskRepo.findById(taskId)

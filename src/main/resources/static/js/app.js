@@ -57,7 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
         currentView: 'quests', currentLessonId: null, currentTaskId: null, profile: null,
         lastSubmitOutput: '', libraryArticles: [], selectedArticleId: null,
         lessonPage: 0, catalogPage: 0,
-        questTeachers: null, selectedQuestTeacher: null
+        questTeachers: null, selectedQuestTeacher: null,
+        taskBackTarget: 'quests'
     };
     const $ = id => document.getElementById(id);
 
@@ -119,7 +120,12 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => navigateTo(btn.dataset.view)));
     $('charCardLink').addEventListener('click', () => navigateTo('profile'));
     $('backToQuests').addEventListener('click', () => navigateTo('quests'));
-    $('backToLesson').addEventListener('click', () => openLesson(state.currentLessonId));
+    $('backToLesson').addEventListener('click', () => {
+        const t = state.taskBackTarget;
+        if (t === 'catalog') navigateTo('catalog');
+        else if (t === 'lesson' && state.currentLessonId != null) openLesson(state.currentLessonId);
+        else navigateTo('quests');
+    });
     $('logoutBtn').addEventListener('click', () => { localStorage.clear(); window.location.href = '/index.html'; });
 
     document.querySelectorAll('.admin-tab').forEach(btn => btn.addEventListener('click', () => {
@@ -581,6 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function openLesson(id) {
         state.currentLessonId = id;
+        state.currentView = 'lesson';
         showView('lesson'); $('viewTitle').textContent = 'Подземелье';
         try {
             const lesson = await API.get('/lessons/' + id);
@@ -613,10 +620,23 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { $('lessonContent').innerHTML = `<p>Ошибка: ${esc(e.message)}</p>`; }
     }
 
+    function syncTaskBackButton() {
+        const btn = $('backToLesson');
+        if (!btn) return;
+        const t = state.taskBackTarget;
+        if (t === 'catalog') btn.textContent = '← Назад в каталог';
+        else if (t === 'lesson') btn.textContent = '← Назад к уроку';
+        else btn.textContent = '← Назад к карте';
+    }
+
     async function openTask(id) {
+        state.taskBackTarget = state.currentView === 'catalog' ? 'catalog'
+            : state.currentView === 'lesson' ? 'lesson' : 'quests';
         state.currentTaskId = id;
+        state.currentView = 'task';
         state.lastSubmitOutput = '';
         showView('task'); $('viewTitle').textContent = 'Битва';
+        syncTaskBackButton();
         $('resultPanel').classList.remove('visible','correct','wrong');
         $('hintAiPanel').style.display = 'none';
         $('hintLocalNote').style.display = 'none';
@@ -810,6 +830,58 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentValue != null) selectEl.value = String(currentValue);
     }
 
+    function fillDungeonProgressGroupSelect() {
+        const sel = $('dungeonProgressGroup');
+        if (!sel) return;
+        const v = sel.value;
+        const parts = ['<option value="">Все подгруппы</option>', '<option value="__none__">Без подгруппы</option>'];
+        (groupsCache || []).forEach(g => parts.push(`<option value="${g.id}">${esc(g.name)}</option>`));
+        sel.innerHTML = parts.join('');
+        if (v && [...sel.options].some(o => o.value === v)) sel.value = v;
+    }
+
+    async function fillDungeonProgressOrders() {
+        const sel = $('dungeonProgressOrder');
+        if (!sel) return;
+        const prev = sel.value;
+        try {
+            const data = await API.get('/lessons?page=0&size=100');
+            const lessons = data.content ?? data ?? [];
+            if (!lessons.length) {
+                sel.innerHTML = '<option value="">Нет подземелий</option>';
+                return;
+            }
+            sel.innerHTML = '<option value="">Подземелье…</option>' + lessons.map(l =>
+                `<option value="${l.orderIndex}">${esc(l.title)} (#${l.orderIndex})</option>`).join('');
+            if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+        } catch {
+            sel.innerHTML = '<option value="">Ошибка загрузки</option>';
+        }
+    }
+
+    function renderDungeonProgress(sheet) {
+        const el = $('dungeonProgressTable');
+        if (!el) return;
+        if (!sheet.tasks?.length) {
+            el.innerHTML = '<p class="admin-edit-hint">В выбранном подземелье пока нет прикреплённых задач.</p>';
+            return;
+        }
+        if (!sheet.students?.length) {
+            const msg = sheet.emptyFilterHint || 'Нет учеников в выбранном фильтре.';
+            el.innerHTML = `<p class="admin-edit-hint">${esc(msg)}</p>`;
+            return;
+        }
+        const th = sheet.tasks.map(t =>
+            `<th title="${escAttr(t.title)}"><span class="dm-th-id">#${t.taskId}</span><span class="dm-th-title">${esc(t.title)}</span></th>`).join('');
+        const trs = sheet.students.map(s => {
+            const cells = (s.solved || []).map(ok =>
+                `<td class="${ok ? 'dm-ok' : 'dm-no'}">${ok ? '✓' : '·'}</td>`).join('');
+            return `<tr><td class="dm-name">${esc(s.username)}</td>${cells}</tr>`;
+        }).join('');
+        el.innerHTML = `<p class="admin-edit-hint" style="margin-bottom:8px"><strong>${esc(sheet.lessonTitle)}</strong> · #${sheet.orderIndex}</p>
+            <div class="dungeon-matrix-wrap"><table class="results-table dungeon-matrix"><thead><tr><th class="dm-name-col">Ученик</th>${th}</tr></thead><tbody>${trs}</tbody></table></div>`;
+    }
+
     async function renderGroups() {
         const el = $('groupsGrid');
         if (!el) return;
@@ -838,6 +910,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             fillGroupSelect($('groupFilter'), true, $('groupFilter')?.value);
             fillGroupSelect($('inviteGroupSelect'), false, $('inviteGroupSelect')?.value);
+            fillDungeonProgressGroupSelect();
+            await fillDungeonProgressOrders();
         } catch (e) {
             el.innerHTML = `<p style="color:var(--text-dim)">${esc(e.message)}</p>`;
         }
@@ -954,6 +1028,23 @@ document.addEventListener('DOMContentLoaded', () => {
             input.value = '';
             await loadGroup();
         } catch (e) { alert(e.message); }
+    });
+
+    $('loadDungeonProgressBtn')?.addEventListener('click', async () => {
+        const order = ($('dungeonProgressOrder') || {}).value;
+        if (!order) { alert('Выберите подземелье.'); return; }
+        const gSel = ($('dungeonProgressGroup') || {}).value ?? '';
+        let q = '';
+        if (gSel === '__none__') q = '?ungrouped=true';
+        else if (gSel) q = '?groupId=' + encodeURIComponent(gSel);
+        const el = $('dungeonProgressTable');
+        if (el) el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+        try {
+            const sheet = await API.get('/admin/dungeons/' + encodeURIComponent(order) + '/progress' + q);
+            renderDungeonProgress(sheet);
+        } catch (e) {
+            if (el) el.innerHTML = `<p style="color:var(--text-dim)">${esc(e.message)}</p>`;
+        }
     });
 
     $('groupFilter')?.addEventListener('change', renderMyGroup);
