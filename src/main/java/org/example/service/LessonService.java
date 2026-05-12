@@ -8,6 +8,8 @@ import org.example.entity.LessonTask;
 import org.example.entity.Role;
 import org.example.entity.Task;
 import org.example.entity.User;
+import org.example.exception.ForbiddenOperationException;
+import org.example.exception.NotFoundException;
 import org.example.repository.LessonRepository;
 import org.example.repository.LessonTaskRepository;
 import org.example.repository.TaskRepository;
@@ -134,6 +136,10 @@ public class LessonService {
         User author = userRepo.findByUsername(authorUsername)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
 
+        if (req.orderIndex() < 0) {
+            throw new IllegalArgumentException("Номер подземелья не может быть отрицательным");
+        }
+
         Lesson lesson = new Lesson();
         lesson.setTitle(req.title());
         lesson.setDescription(req.description());
@@ -155,9 +161,20 @@ public class LessonService {
     }
 
     @Transactional(readOnly = false)
-    public LessonDto update(Long id, LessonCreateRequest req) {
+    public LessonDto updateForTeacher(Long id, LessonCreateRequest req, String teacherUsername) {
+        User teacher = userRepo.findByUsername(teacherUsername)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        if (teacher.getRole() != Role.TEACHER) {
+            throw new ForbiddenOperationException("Доступно только преподавателям");
+        }
         Lesson lesson = lessonRepo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Урок не найден"));
+                .orElseThrow(() -> new NotFoundException("Подземелье не найдено"));
+        if (!lesson.getAuthor().getId().equals(teacher.getId())) {
+            throw new ForbiddenOperationException("Редактировать может только автор подземелья");
+        }
+        if (req.orderIndex() < 0) {
+            throw new IllegalArgumentException("Номер подземелья не может быть отрицательным");
+        }
         if (req.orderIndex() != lesson.getOrderIndex()
                 && lessonRepo.existsByAuthorIdAndOrderIndexAndIdNot(
                 lesson.getAuthor().getId(), req.orderIndex(), lesson.getId())) {
@@ -184,6 +201,9 @@ public class LessonService {
         }
         Lesson lesson = lessonRepo.findByAuthorIdAndOrderIndex(teacher.getId(), currentOrderIndex)
                 .orElseThrow(() -> new IllegalArgumentException("Подземелье #" + currentOrderIndex + " у вас не найдено"));
+        if (req.orderIndex() < 0) {
+            throw new IllegalArgumentException("Номер подземелья не может быть отрицательным");
+        }
         if (req.orderIndex() != lesson.getOrderIndex()
                 && lessonRepo.existsByAuthorIdAndOrderIndexAndIdNot(
                 teacher.getId(), req.orderIndex(), lesson.getId())) {
@@ -209,12 +229,26 @@ public class LessonService {
             throw new IllegalArgumentException("Доступно только преподавателям");
         }
         Lesson lesson = lessonRepo.findByAuthorIdAndOrderIndex(teacher.getId(), orderIndex)
-                .orElseThrow(() -> new IllegalArgumentException("Подземелье #" + orderIndex + " у вас не найдено"));
-        delete(lesson.getId());
+                .orElseThrow(() -> new NotFoundException("Подземелье #" + orderIndex + " у вас не найдено"));
+        purgeLesson(lesson.getId());
     }
 
     @Transactional(readOnly = false)
-    public void delete(Long id) {
+    public void deleteByIdForTeacher(Long id, String teacherUsername) {
+        User teacher = userRepo.findByUsername(teacherUsername)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        if (teacher.getRole() != Role.TEACHER) {
+            throw new ForbiddenOperationException("Доступно только преподавателям");
+        }
+        Lesson lesson = lessonRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Подземелье не найдено"));
+        if (!lesson.getAuthor().getId().equals(teacher.getId())) {
+            throw new ForbiddenOperationException("Удалить подземелье может только его автор");
+        }
+        purgeLesson(id);
+    }
+
+    private void purgeLesson(Long id) {
         log.info("Урок удалён: id={}", id);
         lessonTaskRepo.deleteByLessonId(id);
         lessonRepo.deleteById(id);

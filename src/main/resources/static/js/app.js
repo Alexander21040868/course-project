@@ -135,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         $('atab-' + btn.dataset.atab).classList.add('active');
         if (btn.dataset.atab === 'students') loadGroup();
         if (btn.dataset.atab === 'content') { loadMyLessonsIndex(); refreshTaskChallengeSelect(); }
+        if (btn.dataset.atab === 'challengeAdmin') loadMyChallengesAdmin();
     }));
 
     let catalogTimer;
@@ -165,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (view === 'challenges') loadChallenges();
         if (view === 'leaderboard') loadLeaderboard();
         if (view === 'profile') loadFullProfile();
-        if (view === 'admin') { loadMyLessonsIndex(); refreshTaskChallengeSelect(); }
+        if (view === 'admin') { loadMyLessonsIndex(); refreshTaskChallengeSelect(); loadMyChallengesAdmin(); }
     }
 
     function showView(view) {
@@ -311,6 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="lc-cat">${esc(a.category)}</span>
                     </div>
                     <div class="lc-title">${esc(a.title)}</div>
+                    ${a.authorUsername ? `<div class="lc-author">автор: ${esc(a.authorUsername)}</div>` : ''}
                 </button>`).join('');
             listEl.querySelectorAll('.library-card').forEach(btn => btn.addEventListener('click', () => openArticle(+btn.dataset.aid)));
             if (looksArticleId && items.length === 1) {
@@ -347,6 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <header class="library-article-bar">
                     <span class="lc-id-badge" title="Этот номер указывайте в «Управление» для правки">#${a.id}</span>
                     <h2 class="library-article-h">${esc(a.title)}</h2>
+                    ${a.authorUsername ? `<div class="library-article-author">автор: ${esc(a.authorUsername)}</div>` : ''}
                 </header>
                 <div class="md-content">${html}</div>`;
         } catch (e) { artEl.innerHTML = `<p class="empty-hint">${esc(e.message)}</p>`; }
@@ -1054,6 +1057,43 @@ document.addEventListener('DOMContentLoaded', () => {
         groupNameSearchTimer = setTimeout(renderMyGroup, 200);
     });
 
+    async function loadMyChallengesAdmin() {
+        const el = $('myChallengesAdmin');
+        if (!el) return;
+        el.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+        try {
+            if (!state.profile) await loadProfile();
+            const list = await API.get('/admin/challenges') || [];
+            const me = state.profile?.username;
+            if (!list.length) {
+                el.innerHTML = '<p class="admin-edit-hint">Челленджей пока нет.</p>';
+                return;
+            }
+            el.innerHTML = '<h4>Соревнования</h4>' + list.map(ch => {
+                const mine = me && ch.createdByName === me;
+                const canCancel = mine && ch.upcoming;
+                const st = ch.upcoming ? 'скоро' : ch.active ? 'идёт' : 'завершён';
+                return `<div class="lesson-index-row">
+                    <span class="li-title">${esc(ch.title)}</span>
+                    <span class="li-order">#${ch.id}</span>
+                    <span class="li-meta">${esc(st)} · ${esc(ch.createdByName || '')}</span>
+                    ${canCancel ? `<button type="button" class="btn-admin btn-admin-ghost" data-del-challenge="${ch.id}">Отменить до старта</button>` : ''}
+                </div>`;
+            }).join('');
+            el.querySelectorAll('[data-del-challenge]').forEach(b => b.addEventListener('click', async () => {
+                if (!confirm('Отменить соревнование? Зарегистрированные участники получат уведомление.')) return;
+                try {
+                    await API.delete('/admin/challenges/' + b.dataset.delChallenge);
+                    showToast('🏟', 'Соревнование отменено', '');
+                    loadMyChallengesAdmin();
+                    refreshTaskChallengeSelect();
+                } catch (e) { alert(e.message); }
+            }));
+        } catch (e) {
+            el.innerHTML = `<p class="admin-edit-hint">${esc(e.message)}</p>`;
+        }
+    }
+
     async function loadMyLessonsIndex() {
         const el = $('myLessonsIndex');
         if (!el) return;
@@ -1066,10 +1106,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="li-title">${esc(l.title)}</span>
                     <span class="li-order">#${l.orderIndex}</span>
                     <button type="button" class="btn-admin btn-admin-ghost" data-edit-order="${l.orderIndex}">Редактировать</button>
+                    <button type="button" class="btn-admin btn-admin-ghost" data-del-order="${l.orderIndex}">Удалить</button>
                 </div>`).join('');
             el.querySelectorAll('[data-edit-order]').forEach(b => b.addEventListener('click', () => {
                 $('loadLessonOrder').value = String(b.dataset.editOrder);
                 $('loadLessonBtn').click();
+            }));
+            el.querySelectorAll('[data-del-order]').forEach(b => b.addEventListener('click', async () => {
+                if (!confirm('Удалить подземелье «' + b.closest('.lesson-index-row').querySelector('.li-title').textContent + '»? Связи с задачами будут сняты, сами задачи останутся.')) return;
+                try {
+                    await API.delete('/admin/lessons/by-order/' + encodeURIComponent(b.dataset.delOrder));
+                    showToast('🗺', 'Подземелье удалено', '');
+                    loadMyLessonsIndex();
+                    const dsel = $('dungeonProgressOrder');
+                    if (dsel) await fillDungeonProgressOrders();
+                } catch (e) { alert(e.message); }
             }));
         } catch (e) { el.innerHTML = ''; }
     }
@@ -1189,6 +1240,8 @@ document.addEventListener('DOMContentLoaded', () => {
             renderTaskExamplesFromApi(d.examples);
             $('editTaskId').value = String(d.id);
             $('taskFormSubmitBtn').textContent = 'Сохранить задачу';
+            const delTb = $('deleteTaskBtn');
+            if (delTb) delTb.style.display = '';
             const tcr = $('taskChallengeRow');
             if (tcr) tcr.style.display = 'none';
         } catch (err) { alert(err.message); }
@@ -1197,6 +1250,8 @@ document.addEventListener('DOMContentLoaded', () => {
         $('createTaskForm').reset();
         $('editTaskId').value = '';
         $('loadTaskId').value = '';
+        const delTb = $('deleteTaskBtn');
+        if (delTb) delTb.style.display = 'none';
         const tcs = $('taskChallengeSelect');
         if (tcs) tcs.value = '';
         const tcr = $('taskChallengeRow');
@@ -1210,13 +1265,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const id = +$('loadArticleId').value;
         if (!id) { alert('Введите id статьи (число).'); return; }
         try {
-            const d = await API.get('/articles/' + id);
+            const d = await API.get('/admin/articles/' + id);
             const f = $('createArticleForm');
             setFormField(f, 'title', d.title);
             setFormField(f, 'category', d.category);
             $('articleContent').value = d.content || '';
             $('editArticleId').value = String(d.id);
             $('articleFormSubmitBtn').textContent = 'Сохранить статью';
+            const delAb = $('deleteArticleBtn');
+            if (delAb) delAb.style.display = '';
             syncArticlePreview();
         } catch (err) { alert(err.message); }
     });
@@ -1225,6 +1282,8 @@ document.addEventListener('DOMContentLoaded', () => {
         $('editArticleId').value = '';
         $('loadArticleId').value = '';
         $('articleFormSubmitBtn').textContent = 'Опубликовать';
+        const delAb = $('deleteArticleBtn');
+        if (delAb) delAb.style.display = 'none';
         syncArticlePreview();
     });
     $('articleContent')?.addEventListener('input', () => syncArticlePreview());
@@ -1351,8 +1410,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 resetTaskExamples();
                 $('taskFormSubmitBtn').textContent = 'Создать задачу';
                 if (saved?.id != null) $('loadTaskId').value = String(saved.id);
+                const delTb = $('deleteTaskBtn');
+                if (delTb) delTb.style.display = 'none';
             }
             showToast('⚔', tid ? 'Задача сохранена' : 'Задача создана', '');
+        } catch (err) { alert(err.message); }
+    });
+    $('deleteTaskBtn')?.addEventListener('click', async () => {
+        const tid = $('editTaskId').value;
+        if (!tid) return;
+        if (!confirm('Удалить эту задачу? Все связанные отправки будут удалены. Нельзя, если задача в незавершённом соревновании.')) return;
+        try {
+            await API.delete('/admin/tasks/' + tid);
+            $('clearTaskEditBtn').click();
+            showToast('⚔', 'Задача удалена', '');
+        } catch (err) { alert(err.message); }
+    });
+    $('deleteArticleBtn')?.addEventListener('click', async () => {
+        const aid = $('editArticleId').value;
+        if (!aid) return;
+        if (!confirm('Удалить статью из библиотеки?')) return;
+        try {
+            await API.delete('/admin/articles/' + aid);
+            $('clearArticleEditBtn').click();
+            showToast('📚', 'Статья удалена', '');
+            loadLibrary($('librarySearch')?.value || '');
         } catch (err) { alert(err.message); }
     });
     $('createChallengeForm').addEventListener('submit', async e => {
@@ -1363,6 +1445,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await API.post('/admin/challenges', { title: fd.get('title'), description: fd.get('description'), startTime, endTime, bonusXp: +fd.get('bonusXp') });
             e.target.reset(); showToast('🏟','Челлендж создан','');
             refreshTaskChallengeSelect();
+            loadMyChallengesAdmin();
         } catch(err) { alert(err.message); }
     });
     $('createArticleForm').addEventListener('submit', async e => {

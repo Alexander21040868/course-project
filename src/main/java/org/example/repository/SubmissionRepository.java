@@ -3,6 +3,7 @@ package org.example.repository;
 import org.example.entity.Submission;
 import org.example.entity.SubmissionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -21,4 +22,8 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     @Query("SELECT s FROM Submission s WHERE s.user.id = :uid AND s.task.id = :tid AND s.status = :st ORDER BY s.submittedAt ASC")
     List<Submission> findByUserAndTaskAndStatusOrderBySubmittedAtAsc(@Param("uid") Long uid, @Param("tid") Long tid,
                                                                      @Param("st") SubmissionStatus st);
+
+    @Modifying
+    @Query("delete from Submission s where s.task.id = :taskId")
+    void deleteByTaskId(@Param("taskId") Long taskId);
 }

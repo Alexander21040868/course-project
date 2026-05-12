@@ -2,6 +2,8 @@ package org.example.service;
 
 import org.example.dto.*;
 import org.example.entity.*;
+import org.example.exception.ForbiddenOperationException;
+import org.example.exception.NotFoundException;
 import org.example.repository.*;
 import org.example.util.XpLimits;
 import org.slf4j.Logger;
@@ -58,6 +60,10 @@ public class ChallengeService {
     public ChallengeDto create(ChallengeCreateRequest req, String username) {
         User author = userRepo.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        LocalDateTime now = LocalDateTime.now();
+        if (req.startTime().isBefore(now)) {
+            throw new IllegalArgumentException("Время начала соревнования не может быть в прошлом");
+        }
         if (!req.startTime().isBefore(req.endTime())) {
             throw new IllegalArgumentException("Время окончания должно быть позже старта");
         }
@@ -75,6 +81,31 @@ public class ChallengeService {
         notificationService.notifyAllStudents("Новый челлендж", ch.getTitle());
 
         return toDto(ch, author.getId(), LocalDateTime.now());
+    }
+
+    @Transactional(readOnly = false)
+    public void cancelBeforeStart(long challengeId, String username) {
+        User actor = userRepo.findByUsername(username)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        Challenge ch = challengeRepo.findDetailById(challengeId)
+                .orElseThrow(() -> new NotFoundException("Соревнование не найдено"));
+        if (!ch.getCreatedBy().getId().equals(actor.getId())) {
+            throw new ForbiddenOperationException("Отменить может только организатор");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (!now.isBefore(ch.getStartTime())) {
+            throw new IllegalArgumentException("Нельзя отменить соревнование после начала");
+        }
+        List<Long> notifyUserIds = participantRepo.findByChallengeIdOrderByTasksSolvedDesc(challengeId).stream()
+                .map(cp -> cp.getUser().getId())
+                .distinct()
+                .toList();
+        String title = ch.getTitle();
+        challengeRepo.delete(ch);
+        for (Long uid : notifyUserIds) {
+            notificationService.notifyUser(uid, "Соревнование отменено",
+                    "Организатор отменил соревнование «" + title + "».");
+        }
     }
 
     @Transactional(readOnly = false)

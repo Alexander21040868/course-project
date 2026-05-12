@@ -3,6 +3,7 @@ package org.example.repository;
 import org.example.entity.Challenge;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -41,4 +42,11 @@ public interface ChallengeRepository extends JpaRepository<Challenge, Long> {
 
     @Query("SELECT c FROM Challenge c WHERE c.startTime <= :now AND SIZE(c.tasks) = 0")
     List<Challenge> findStartedWithNoTasks(@Param("now") LocalDateTime now);
+
+    @Query("SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END FROM Challenge c JOIN c.tasks t WHERE t.id = :taskId AND c.endTime > :now")
+    boolean existsUnfinishedChallengeWithTask(@Param("taskId") Long taskId, @Param("now") LocalDateTime now);
+
+    @Modifying
+    @Query(value = "DELETE FROM challenge_tasks WHERE task_id = :taskId", nativeQuery = true)
+    void deleteTaskLinks(@Param("taskId") Long taskId);
 }

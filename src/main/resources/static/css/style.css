@@ -994,6 +994,8 @@ image.png
 }
 .library-card .lc-cat { font-size: 10px; color: var(--purple); text-align: right; }
 .library-card .lc-title { font-size: 13px; font-weight: 700; }
+.library-card .lc-author { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.library-article-author { font-size: 13px; color: var(--text-dim); margin-top: 6px; }
 .library-article-bar {
     display: flex;
     flex-wrap: wrap;
@@ -1303,7 +1305,8 @@ image.png
 
 .lesson-index { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 .lesson-index h4 { font-family: var(--pixel); font-size: 9px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
-.lesson-index-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+.lesson-index-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; font-size: 12px; }
+.lesson-index-row .li-meta { flex: 1 1 140px; color: var(--text-dim); font-size: 11px; min-width: 0; }
 .lesson-index-row .li-id { font-family: var(--pixel); font-size: 9px; color: var(--cyan); }
 .quest-teacher-bar {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -1316,8 +1319,8 @@ image.png
     border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 13px;
 }
 .quest-teacher-bar select:focus { outline: none; border-color: var(--cyan); }
-.lesson-index-row .li-order { color: var(--text-dim); font-size: 11px; }
-.lesson-index-row .li-title { color: var(--text); }
+.lesson-index-row .li-order { color: var(--text-dim); font-size: 11px; flex: 0 0 auto; }
+.lesson-index-row .li-title { flex: 1 1 140px; color: var(--text); min-width: 0; }
 
 
 .group-move-select {

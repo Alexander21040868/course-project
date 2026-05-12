@@ -5,6 +5,8 @@ import org.example.dto.ArticleDto;
 import org.example.dto.ArticleSummaryDto;
 import org.example.entity.Article;
 import org.example.entity.User;
+import org.example.exception.ForbiddenOperationException;
+import org.example.exception.NotFoundException;
 import org.example.repository.ArticleRepository;
 import org.example.repository.UserRepository;
 import org.slf4j.Logger;
@@ -32,18 +34,21 @@ public class ArticleService {
     public List<ArticleSummaryDto> search(String q) {
         if (q == null || q.isBlank()) {
             return articleRepo.findAllByOrderByOrderIndexAsc().stream()
-                    .map(a -> new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(), a.getOrderIndex()))
+                    .map(a -> new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(),
+                            a.getAuthor() != null ? a.getAuthor().getUsername() : null, a.getOrderIndex()))
                     .toList();
         }
         String t = q.trim();
         Optional<Long> byId = parseNumericIdQuery(t);
         if (byId.isPresent()) {
             return articleRepo.findById(byId.get())
-                    .map(a -> List.of(new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(), a.getOrderIndex())))
+                    .map(a -> List.of(new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(),
+                            a.getAuthor() != null ? a.getAuthor().getUsername() : null, a.getOrderIndex())))
                     .orElseGet(List::of);
         }
         return articleRepo.findByTitleContainingIgnoreCaseOrderByOrderIndexAsc(t).stream()
-                .map(a -> new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(), a.getOrderIndex()))
+                .map(a -> new ArticleSummaryDto(a.getId(), a.getTitle(), a.getCategory(),
+                        a.getAuthor() != null ? a.getAuthor().getUsername() : null, a.getOrderIndex()))
                 .toList();
     }
 
@@ -61,12 +66,23 @@ public class ArticleService {
     @Transactional(readOnly = true)
     public ArticleDto findById(Long id) {
         return articleRepo.findById(id).map(this::toDto)
-                .orElseThrow(() -> new IllegalArgumentException("Статья не найдена"));
+                .orElseThrow(() -> new NotFoundException("Статья не найдена"));
+    }
+
+    @Transactional(readOnly = true)
+    public ArticleDto findForEdit(Long id, String editorUsername) {
+        User editor = userRepo.findByUsername(editorUsername)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        Article a = articleRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Статья не найдена"));
+        requireArticleAuthor(a, editor);
+        return toDto(a);
     }
 
     @Transactional(readOnly = false)
     public ArticleDto create(ArticleCreateRequest req, String authorUsername) {
-        User author = userRepo.findByUsername(authorUsername).orElse(null);
+        User author = userRepo.findByUsername(authorUsername)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
         Article a = new Article();
         a.setTitle(req.title().trim());
         a.setContent(req.content());
@@ -79,9 +95,12 @@ public class ArticleService {
     }
 
     @Transactional(readOnly = false)
-    public ArticleDto update(Long id, ArticleCreateRequest req) {
+    public ArticleDto update(Long id, ArticleCreateRequest req, String editorUsername) {
+        User editor = userRepo.findByUsername(editorUsername)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
         Article a = articleRepo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Статья не найдена"));
+                .orElseThrow(() -> new NotFoundException("Статья не найдена"));
+        requireArticleAuthor(a, editor);
         a.setTitle(req.title().trim());
         a.setContent(req.content());
         a.setCategory(req.category() != null && !req.category().isBlank() ? req.category().trim() : "Справочник");
@@ -96,9 +115,20 @@ public class ArticleService {
     }
 
     @Transactional(readOnly = false)
-    public void delete(Long id) {
+    public void delete(Long id, String editorUsername) {
+        User editor = userRepo.findByUsername(editorUsername)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        Article a = articleRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Статья не найдена"));
+        requireArticleAuthor(a, editor);
         log.info("Статья удалена: id={}", id);
         articleRepo.deleteById(id);
+    }
+
+    private void requireArticleAuthor(Article a, User editor) {
+        if (a.getAuthor() == null || !a.getAuthor().getId().equals(editor.getId())) {
+            throw new ForbiddenOperationException("Это может делать только автор статьи");
+        }
     }
 
     private ArticleDto toDto(Article a) {

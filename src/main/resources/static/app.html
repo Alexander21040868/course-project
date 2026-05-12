@@ -163,6 +163,7 @@
                                 </div>
                             </div>
                             <button type="submit" class="btn-admin" id="articleFormSubmitBtn">Опубликовать</button>
+                            <button type="button" class="btn-admin btn-admin-ghost" id="deleteArticleBtn" style="display:none">Удалить статью</button>
                         </form>
                         <input type="hidden" id="editArticleId" value="" autocomplete="off">
                     </div>
@@ -179,7 +180,7 @@
                             <div><label>Название</label><input type="text" name="title" required placeholder="Введение в C"></div>
                             <div><label>Описание</label><input type="text" name="description" placeholder="Краткое описание"></div>
                             <div><label>Содержание (HTML)</label><textarea name="content" placeholder="<p>Теория...</p>"></textarea></div>
-                            <div><label>Порядковый номер</label><input type="number" name="orderIndex" value="0"></div>
+                            <div><label>Порядковый номер</label><input type="number" name="orderIndex" value="0" min="0" step="1"></div>
                             <div>
                                 <label>Прикрепить существующие задачи (id через запятую)</label>
                                 <input type="text" name="taskIds" placeholder="например: 1, 4, 7" autocomplete="off">
@@ -229,6 +230,7 @@
                                 <p class="admin-tc-hint">Только при создании новой задачи. К уже существующим челлендж не подключается.</p>
                             </div>
                             <button type="submit" class="btn-admin" id="taskFormSubmitBtn">Создать задачу</button>
+                            <button type="button" class="btn-admin btn-admin-ghost" id="deleteTaskBtn" style="display:none">Удалить задачу</button>
                         </form>
                         <input type="hidden" id="editTaskId" value="" autocomplete="off">
                     </div>
@@ -290,6 +292,7 @@
                             <button type="submit" class="btn-admin">Создать челлендж</button>
                         </form>
                     </div>
+                    <div class="admin-section" id="myChallengesAdmin"></div>
                 </div>
             </div>
         </main>

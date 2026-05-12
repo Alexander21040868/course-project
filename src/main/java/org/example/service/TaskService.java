@@ -5,6 +5,8 @@ import org.example.dto.TaskDto;
 import org.example.dto.TaskEditDto;
 import org.example.dto.TestCaseDto;
 import org.example.entity.*;
+import org.example.exception.ForbiddenOperationException;
+import org.example.exception.NotFoundException;
 import org.example.repository.*;
 import org.example.util.XpLimits;
 import org.springframework.data.domain.Page;
@@ -139,9 +141,12 @@ public class TaskService {
         return task;
     }
 
-    public TaskEditDto findForEdit(Long id) {
+    public TaskEditDto findForEdit(Long id, String editorUsername) {
+        User editor = userRepo.findByUsername(editorUsername)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
         Task t = taskRepo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+                .orElseThrow(() -> new NotFoundException("Задача не найдена"));
+        requireTaskAuthor(t, editor);
         List<TestCaseDto> examples = testCaseRepo.findByTaskIdOrderByOrderIndexAsc(id).stream()
                 .map(tc -> new TestCaseDto(tc.getId(), tc.getInput(), tc.getExpectedOutput(), tc.isSample()))
                 .toList();
@@ -190,9 +195,12 @@ public class TaskService {
     }
 
     @Transactional(readOnly = false)
-    public TaskDto update(Long id, TaskCreateRequest req) {
+    public TaskDto update(Long id, TaskCreateRequest req, String editorUsername) {
+        User editor = userRepo.findByUsername(editorUsername)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
         Task task = taskRepo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+                .orElseThrow(() -> new NotFoundException("Задача не найдена"));
+        requireTaskAuthor(task, editor);
         task.setTitle(req.title());
         task.setDescription(req.description());
         if (req.difficulty() != null) task.setDifficulty(Difficulty.valueOf(req.difficulty()));
@@ -209,9 +217,30 @@ public class TaskService {
     }
 
     @Transactional(readOnly = false)
-    public void delete(Long id) {
+    public void deleteForAuthor(Long id, String username) {
+        User actor = userRepo.findByUsername(username)
+                .orElseThrow(() -> new NotFoundException("Пользователь не найден"));
+        Task task = taskRepo.findById(id)
+                .orElseThrow(() -> new NotFoundException("Задача не найдена"));
+        requireTaskAuthor(task, actor);
+        LocalDateTime now = LocalDateTime.now();
+        if (challengeRepo.existsUnfinishedChallengeWithTask(id, now)) {
+            throw new IllegalArgumentException(
+                    "Нельзя удалить задачу, пока она в незавершённом соревновании");
+        }
+        submissionRepo.deleteByTaskId(id);
+        challengeRepo.deleteTaskLinks(id);
         lessonTaskRepo.deleteByTaskId(id);
-        taskRepo.deleteById(id);
+        taskRepo.delete(task);
+    }
+
+    private void requireTaskAuthor(Task task, User editor) {
+        if (editor.getRole() != Role.TEACHER) {
+            throw new ForbiddenOperationException("Изменять задачи могут только преподаватели");
+        }
+        if (task.getAuthor() == null || !task.getAuthor().getId().equals(editor.getId())) {
+            throw new ForbiddenOperationException("Это может делать только автор задачи");
+        }
     }
 
     private void saveTestCases(Task task, List<TaskCreateRequest.TestCaseInput> cases) {

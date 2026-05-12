@@ -81,8 +81,8 @@ const API = {
     },
 
     _checkAuth(status) {
-        if (status === 401 || status === 403) {
-            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
+        if (status === 401) {
+            this._failSession('Сессия истекла. Войдите снова.');
         }
     },
 
@@ -109,8 +109,8 @@ const API = {
         const t = this.token();
         if (t) h['Authorization'] = 'Bearer ' + t;
         const res = await fetch(this.base + path, { headers: h });
-        if (res.status === 401 || res.status === 403) {
-            this._failSession('Сессия истекла или нет доступа. Войдите снова.');
+        if (res.status === 401) {
+            this._failSession('Сессия истекла. Войдите снова.');
         }
         if (!res.ok) throw new Error('Ошибка загрузки файла');
         return res.blob();

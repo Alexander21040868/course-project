@@ -57,13 +57,14 @@ public class AdminController {
 
     @PutMapping("/lessons/{id}")
     public ResponseEntity<LessonDto> updateLesson(@PathVariable("id") Long id,
-                                                   @Valid @RequestBody LessonCreateRequest req) {
-        return ResponseEntity.ok(lessonService.update(id, req));
+                                                   @Valid @RequestBody LessonCreateRequest req,
+                                                   Principal principal) {
+        return ResponseEntity.ok(lessonService.updateForTeacher(id, req, principal.getName()));
     }
 
     @DeleteMapping("/lessons/{id}")
-    public ResponseEntity<Void> deleteLesson(@PathVariable("id") Long id) {
-        lessonService.delete(id);
+    public ResponseEntity<Void> deleteLesson(@PathVariable("id") Long id, Principal principal) {
+        lessonService.deleteByIdForTeacher(id, principal.getName());
         return ResponseEntity.noContent().build();
     }
 
@@ -95,19 +96,20 @@ public class AdminController {
     }
 
     @GetMapping("/tasks/{id}")
-    public ResponseEntity<TaskEditDto> getTaskForEdit(@PathVariable("id") Long id) {
-        return ResponseEntity.ok(taskService.findForEdit(id));
+    public ResponseEntity<TaskEditDto> getTaskForEdit(@PathVariable("id") Long id, Principal principal) {
+        return ResponseEntity.ok(taskService.findForEdit(id, principal.getName()));
     }
 
     @PutMapping("/tasks/{id}")
     public ResponseEntity<TaskDto> updateTask(@PathVariable("id") Long id,
-                                               @Valid @RequestBody TaskCreateRequest req) {
-        return ResponseEntity.ok(taskService.update(id, req));
+                                               @Valid @RequestBody TaskCreateRequest req,
+                                               Principal principal) {
+        return ResponseEntity.ok(taskService.update(id, req, principal.getName()));
     }
 
     @DeleteMapping("/tasks/{id}")
-    public ResponseEntity<Void> deleteTask(@PathVariable("id") Long id) {
-        taskService.delete(id);
+    public ResponseEntity<Void> deleteTask(@PathVariable("id") Long id, Principal principal) {
+        taskService.deleteForAuthor(id, principal.getName());
         return ResponseEntity.noContent().build();
     }
 
@@ -120,6 +122,12 @@ public class AdminController {
     @GetMapping("/challenges")
     public ResponseEntity<List<ChallengeDto>> listChallenges(Principal principal) {
         return ResponseEntity.ok(challengeService.findAll(principal.getName()));
+    }
+
+    @DeleteMapping("/challenges/{id}")
+    public ResponseEntity<Void> deleteChallenge(@PathVariable("id") Long id, Principal principal) {
+        challengeService.cancelBeforeStart(id, principal.getName());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/students")
@@ -201,15 +209,21 @@ public class AdminController {
         return ResponseEntity.ok(articleService.create(req, principal.getName()));
     }
 
+    @GetMapping("/articles/{id}")
+    public ResponseEntity<ArticleDto> getArticleForEdit(@PathVariable("id") Long id, Principal principal) {
+        return ResponseEntity.ok(articleService.findForEdit(id, principal.getName()));
+    }
+
     @PutMapping("/articles/{id}")
     public ResponseEntity<ArticleDto> updateArticle(@PathVariable("id") Long id,
-                                                    @Valid @RequestBody ArticleCreateRequest req) {
-        return ResponseEntity.ok(articleService.update(id, req));
+                                                    @Valid @RequestBody ArticleCreateRequest req,
+                                                    Principal principal) {
+        return ResponseEntity.ok(articleService.update(id, req, principal.getName()));
     }
 
     @DeleteMapping("/articles/{id}")
-    public ResponseEntity<Void> deleteArticle(@PathVariable("id") Long id) {
-        articleService.delete(id);
+    public ResponseEntity<Void> deleteArticle(@PathVariable("id") Long id, Principal principal) {
+        articleService.delete(id, principal.getName());
         return ResponseEntity.noContent().build();
     }
 }
