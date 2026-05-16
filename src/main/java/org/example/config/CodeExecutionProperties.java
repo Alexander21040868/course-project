@@ -6,11 +6,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class CodeExecutionProperties {
 
     private boolean enabled = true;
-    private String dockerImage = "gcc:14-bookworm";
+    private String dockerImage = "public.ecr.aws/docker/library/gcc:14-bookworm";
     private String dockerPath = "docker";
     private long wallTimeoutMs = 45_000;
     private int runTimeoutSec = 5;
     private boolean fallbackLocalGcc = true;
+
+    private String dockerSandboxVolume;
+
+    private String dockerSandboxMountPath = "/cq-sandbox";
 
     public boolean isEnabled() {
         return enabled;
@@ -58,5 +62,21 @@ public class CodeExecutionProperties {
 
     public void setFallbackLocalGcc(boolean fallbackLocalGcc) {
         this.fallbackLocalGcc = fallbackLocalGcc;
+    }
+
+    public String getDockerSandboxVolume() {
+        return dockerSandboxVolume;
+    }
+
+    public void setDockerSandboxVolume(String dockerSandboxVolume) {
+        this.dockerSandboxVolume = dockerSandboxVolume;
+    }
+
+    public String getDockerSandboxMountPath() {
+        return dockerSandboxMountPath;
+    }
+
+    public void setDockerSandboxMountPath(String dockerSandboxMountPath) {
+        this.dockerSandboxMountPath = dockerSandboxMountPath;
     }
 }

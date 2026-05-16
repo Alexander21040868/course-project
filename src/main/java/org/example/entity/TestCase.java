@@ -1,6 +1,8 @@
 package org.example.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "test_cases")
@@ -14,10 +16,10 @@ public class TestCase {
     @JoinColumn(name = "task_id", nullable = false)
     private Task task;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     private String input;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     @Column(name = "expected_output", nullable = false)
     private String expectedOutput;
 

@@ -6,6 +6,7 @@ import org.example.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -24,6 +25,7 @@ public class GamificationService {
     private final LessonTaskRepository lessonTaskRepo;
     private final NotificationService notificationService;
     private final TaskVisibilityService taskVisibility;
+    private final Clock clock;
 
     public GamificationService(UserRepository userRepo,
                                AchievementRepository achievementRepo,
@@ -33,7 +35,8 @@ public class GamificationService {
                                LessonRepository lessonRepo,
                                LessonTaskRepository lessonTaskRepo,
                                NotificationService notificationService,
-                               TaskVisibilityService taskVisibility) {
+                               TaskVisibilityService taskVisibility,
+                               Clock clock) {
         this.userRepo = userRepo;
         this.achievementRepo = achievementRepo;
         this.userAchievementRepo = userAchievementRepo;
@@ -43,6 +46,7 @@ public class GamificationService {
         this.lessonTaskRepo = lessonTaskRepo;
         this.notificationService = notificationService;
         this.taskVisibility = taskVisibility;
+        this.clock = clock;
     }
 
     @Transactional
@@ -71,7 +75,7 @@ public class GamificationService {
 
         tryGrant(user, "LESSON_CLEAR", hasAnyLessonCleared(user.getId()), earned);
 
-        LocalTime now = LocalTime.now();
+        LocalTime now = LocalTime.now(clock);
         boolean isNight = now.getHour() >= 0 && now.getHour() < 5;
         if (isNight) tryGrant(user, "SPEEDRUN", true, earned);
 

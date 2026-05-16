@@ -12,5 +12,6 @@ public record SubmissionResponse(
         int totalTests,
         List<TestResultDto> testResults,
         List<AchievementDto> newAchievements,
-        LocalDateTime submittedAt
+        LocalDateTime submittedAt,
+        String codeSandbox
 ) {}

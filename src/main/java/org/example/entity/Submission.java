@@ -2,6 +2,8 @@ package org.example.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "submissions")
@@ -19,7 +21,7 @@ public class Submission {
     @JoinColumn(name = "task_id", nullable = false)
     private Task task;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     @Column(nullable = false)
     private String code;
 
@@ -27,7 +29,7 @@ public class Submission {
     @Column(nullable = false, length = 20)
     private SubmissionStatus status = SubmissionStatus.PENDING;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     private String output;
 
     @Column(name = "submitted_at", nullable = false, updatable = false)

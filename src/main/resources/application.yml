@@ -30,7 +30,7 @@ app:
 
   code-execution:
     enabled: true
-    docker-image: gcc:14-bookworm
+    docker-image: public.ecr.aws/docker/library/gcc:14-bookworm
     docker-path: ${APP_CODE_EXECUTION_DOCKER_PATH:docker}
     wall-timeout-ms: 45000
     run-timeout-sec: 5
@@ -49,9 +49,10 @@ spring:
     password: codequest
 
   jpa:
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    open-in-view: false
 
   flyway:
-    locations: classpath:db/migration
+    locations: classpath:db/migration_postgresql

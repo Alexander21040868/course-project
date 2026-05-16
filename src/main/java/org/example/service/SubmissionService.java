@@ -66,12 +66,16 @@ public class SubmissionService {
         List<TestResultDto> testResults = new ArrayList<>();
         int passed = 0;
         int total;
+        ExecutionBackend codeSandboxBackend = null;
 
         if (!testCases.isEmpty()) {
             total = testCases.size();
             for (int i = 0; i < testCases.size(); i++) {
                 TestCase tc = testCases.get(i);
                 TestEval ev = evaluateAgainstTest(req.code(), tc);
+                if (codeSandboxBackend == null && ev.sandboxBackend() != null) {
+                    codeSandboxBackend = ev.sandboxBackend();
+                }
                 if (ev.passed()) {
                     passed++;
                 }
@@ -86,6 +90,7 @@ public class SubmissionService {
         } else {
             total = 1;
             TestEval ev = evaluateLegacy(req.code(), task);
+            codeSandboxBackend = ev.sandboxBackend();
             if (ev.passed()) {
                 passed = 1;
             }
@@ -118,13 +123,15 @@ public class SubmissionService {
             }
         }
 
-        log.info("User {} submitted task #{}: {} ({}/{} tests) +{} XP",
-                username, req.taskId(), sub.getStatus(), passed, total, xpEarned);
+        log.info("User {} submitted task #{}: {} ({}/{} tests) +{} XP; [cq-sandbox] codeSandbox={}",
+                username, req.taskId(), sub.getStatus(), passed, total, xpEarned,
+                codeSandboxBackend != null ? codeSandboxBackend.name() : "none");
 
         return new SubmissionResponse(
                 sub.getId(), sub.getStatus().name(), output,
                 xpEarned, passed, total, testResults,
-                newAchievements, sub.getSubmittedAt()
+                newAchievements, sub.getSubmittedAt(),
+                codeSandboxBackend != null ? codeSandboxBackend.name() : null
         );
     }
 
@@ -140,16 +147,16 @@ public class SubmissionService {
                 .toList();
     }
 
-    private record TestEval(boolean passed, String detail) {}
+    private record TestEval(boolean passed, String detail, ExecutionBackend sandboxBackend) {}
 
     private TestEval evaluateAgainstTest(String code, TestCase tc) {
         String expectedRaw = tc.getExpectedOutput();
         if (expectedRaw == null || expectedRaw.isBlank()) {
-            return new TestEval(false, "У теста пустой ожидаемый вывод.");
+            return new TestEval(false, "У теста пустой ожидаемый вывод.", null);
         }
         String c = code == null ? "" : code.trim();
         if (c.isEmpty() || !c.contains("main")) {
-            return new TestEval(false, "Нужен непустой код с функцией main.");
+            return new TestEval(false, "Нужен непустой код с функцией main.", null);
         }
 
         String expected = normalizeText(expectedRaw);
@@ -161,11 +168,11 @@ public class SubmissionService {
     private TestEval evaluateLegacy(String code, Task task) {
         String expectedRaw = task.getExpectedOutput();
         if (expectedRaw == null || expectedRaw.isBlank()) {
-            return new TestEval(false, "Нет тест-кейсов и не задан expected output у задачи.");
+            return new TestEval(false, "Нет тест-кейсов и не задан expected output у задачи.", null);
         }
         String c = code == null ? "" : code.trim();
         if (c.isEmpty() || !c.contains("main")) {
-            return new TestEval(false, "Нужен непустой код с функцией main.");
+            return new TestEval(false, "Нужен непустой код с функцией main.", null);
         }
 
         String expected = normalizeText(expectedRaw);
@@ -174,20 +181,21 @@ public class SubmissionService {
     }
 
     private static TestEval mapExecutionToEval(CExecutionResult r, String expected) {
+        ExecutionBackend b = r.sandboxBackend();
         return switch (r.kind()) {
-            case DISABLED, DOCKER_ERROR -> new TestEval(false, r.stderrOrCompileLog());
-            case COMPILE_ERROR -> new TestEval(false, "Компиляция:\n" + shorten(r.stderrOrCompileLog(), 1200));
-            case TIMEOUT -> new TestEval(false, r.stderrOrCompileLog());
+            case DISABLED, DOCKER_ERROR -> new TestEval(false, r.stderrOrCompileLog(), b);
+            case COMPILE_ERROR -> new TestEval(false, "Компиляция:\n" + shorten(r.stderrOrCompileLog(), 1200), b);
+            case TIMEOUT -> new TestEval(false, r.stderrOrCompileLog(), b);
             case RUNTIME_ERROR -> new TestEval(false,
                     "Ошибка выполнения (код/сигнал). stderr:\n"
                             + shorten(r.stderrOrCompileLog(), 600)
-                            + "\nstdout:\n" + shorten(r.stdout(), 400));
+                            + "\nstdout:\n" + shorten(r.stdout(), 400), b);
             case OK -> {
                 if (normalizedMatch(r.stdout(), expected)) {
-                    yield new TestEval(true, null);
+                    yield new TestEval(true, null, b);
                 }
                 yield new TestEval(false,
-                        "Получено:\n" + normalizeOut(r.stdout()) + "\nОжидалось:\n" + normalizeOut(expected));
+                        "Получено:\n" + normalizeOut(r.stdout()) + "\nОжидалось:\n" + normalizeOut(expected), b);
             }
         };
     }

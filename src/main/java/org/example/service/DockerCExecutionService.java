@@ -35,7 +35,7 @@ public class DockerCExecutionService {
 
         Path work = null;
         try {
-            work = Files.createTempDirectory("cq-c-");
+            work = createWorkDir();
             Path solution = work.resolve("solution.c");
             Path input = work.resolve("input.txt");
             Path runner = work.resolve("run.sh");
@@ -46,6 +46,7 @@ public class DockerCExecutionService {
 
             boolean dockerRan = tryDockerRun(work);
             if (!dockerRan && props.isFallbackLocalGcc()) {
+                log.info("[cq-sandbox] backend=LOCAL_GCC reason=fallback_after_docker_failure");
                 log.info("Docker недоступен или завершился с ошибкой — проверка через локальный gcc.");
                 scrubArtifacts(work);
                 return runLocalGcc(work, in);
@@ -55,12 +56,14 @@ public class DockerCExecutionService {
                         "Не удалось запустить Docker. Запустите Docker Desktop или включите app.code-execution.fallback-local-gcc.");
             }
 
+            log.info("[cq-sandbox] backend=DOCKER image={} dockerPath={}", props.getDockerImage(), props.getDockerPath());
             return readWorkdirResults(work);
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("C sandbox error", e);
             if (props.isFallbackLocalGcc() && work != null) {
                 try {
+                    log.info("[cq-sandbox] backend=LOCAL_GCC reason=exception_fallback");
                     scrubArtifacts(work);
                     return runLocalGcc(work, in);
                 } catch (IOException | InterruptedException e2) {
@@ -78,19 +81,49 @@ public class DockerCExecutionService {
         }
     }
 
+    private Path createWorkDir() throws IOException {
+        String vol = props.getDockerSandboxVolume();
+        if (vol != null && !vol.isBlank()) {
+            Path base = Path.of(props.getDockerSandboxMountPath());
+            Files.createDirectories(base);
+            return Files.createTempDirectory(base, "cq-c-");
+        }
+        return Files.createTempDirectory("cq-c-");
+    }
+
     private boolean tryDockerRun(Path work) throws IOException, InterruptedException {
-        List<String> cmd = List.of(
-                props.getDockerPath(),
-                "run", "--rm",
-                "--network", "none",
-                "--memory", "128m",
-                "--cpus", "0.5",
-                "--pids-limit", "64",
-                "--security-opt", "no-new-privileges",
-                "-v", work.toAbsolutePath() + ":/work:rw",
-                props.getDockerImage(),
-                "sh", "/work/run.sh"
-        );
+        List<String> cmd = new ArrayList<>();
+        cmd.add(props.getDockerPath());
+        cmd.add("run");
+        cmd.add("--rm");
+        cmd.add("--network");
+        cmd.add("none");
+        cmd.add("--memory");
+        cmd.add("128m");
+        cmd.add("--cpus");
+        cmd.add("0.5");
+        cmd.add("--pids-limit");
+        cmd.add("64");
+        cmd.add("--security-opt");
+        cmd.add("no-new-privileges");
+
+        String vol = props.getDockerSandboxVolume();
+        if (vol != null && !vol.isBlank()) {
+            String mount = props.getDockerSandboxMountPath();
+            cmd.add("-v");
+            cmd.add(vol + ":" + mount + ":rw");
+            cmd.add(props.getDockerImage());
+            cmd.add("sh");
+            cmd.add("-c");
+            String wd = work.toAbsolutePath().normalize().toString();
+            cmd.add("cd " + shellSingleQuoted(wd) + " && sh run.sh");
+        } else {
+            cmd.add("-v");
+            cmd.add(work.toAbsolutePath() + ":/work:rw");
+            cmd.add(props.getDockerImage());
+            cmd.add("sh");
+            cmd.add("/work/run.sh");
+        }
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectErrorStream(true);
@@ -153,10 +186,11 @@ public class DockerCExecutionService {
         String compileLog = readAll(gccProc.getInputStream());
         if (!gccProc.waitFor(25, TimeUnit.SECONDS)) {
             gccProc.destroyForcibly();
-            return new CExecutionResult(CExecutionResult.Kind.TIMEOUT, "", "Компиляция не уложилась во время.");
+            return new CExecutionResult(CExecutionResult.Kind.TIMEOUT, "", "Компиляция не уложилась во время.",
+                    ExecutionBackend.LOCAL_GCC);
         }
         if (gccProc.exitValue() != 0) {
-            return new CExecutionResult(CExecutionResult.Kind.COMPILE_ERROR, "", compileLog);
+            return new CExecutionResult(CExecutionResult.Kind.COMPILE_ERROR, "", compileLog, ExecutionBackend.LOCAL_GCC);
         }
 
         Path binary = work.resolve(exe);
@@ -170,16 +204,21 @@ public class DockerCExecutionService {
         boolean done = runProc.waitFor(runMs, TimeUnit.MILLISECONDS);
         if (!done) {
             runProc.destroyForcibly();
-            return new CExecutionResult(CExecutionResult.Kind.TIMEOUT, "", "Программа не уложилась в лимит времени.");
+            return new CExecutionResult(CExecutionResult.Kind.TIMEOUT, "", "Программа не уложилась в лимит времени.",
+                    ExecutionBackend.LOCAL_GCC);
         }
         String out = readAll(runProc.getInputStream());
         String err = readAll(runProc.getErrorStream());
         int code = runProc.exitValue();
         if (code != 0) {
             String detail = err.isBlank() ? ("код выхода " + code) : err;
-            return new CExecutionResult(CExecutionResult.Kind.RUNTIME_ERROR, out, detail);
+            return new CExecutionResult(CExecutionResult.Kind.RUNTIME_ERROR, out, detail, ExecutionBackend.LOCAL_GCC);
         }
-        return new CExecutionResult(CExecutionResult.Kind.OK, out, err);
+        return new CExecutionResult(CExecutionResult.Kind.OK, out, err, ExecutionBackend.LOCAL_GCC);
+    }
+
+    private static String shellSingleQuoted(String s) {
+        return "'" + s.replace("'", "'\\''") + "'";
     }
 
     private static String localExeFile() {
@@ -194,10 +233,11 @@ public class DockerCExecutionService {
         Path marker = work.resolve("compile_failed.marker");
         if (Files.exists(marker)) {
             String logText = readIfExists(work.resolve("compile.log"));
-            return new CExecutionResult(CExecutionResult.Kind.COMPILE_ERROR, "", logText);
+            return new CExecutionResult(CExecutionResult.Kind.COMPILE_ERROR, "", logText, ExecutionBackend.DOCKER);
         }
         if (Files.exists(work.resolve("timed_out.marker"))) {
-            return new CExecutionResult(CExecutionResult.Kind.TIMEOUT, "", "Программа не уложилась в лимит времени.");
+            return new CExecutionResult(CExecutionResult.Kind.TIMEOUT, "", "Программа не уложилась в лимит времени.",
+                    ExecutionBackend.DOCKER);
         }
 
         String out = readIfExists(work.resolve("stdout.txt"));
@@ -213,9 +253,9 @@ public class DockerCExecutionService {
 
         if (exit != 0) {
             String detail = err.isBlank() ? ("код выхода " + exit) : err;
-            return new CExecutionResult(CExecutionResult.Kind.RUNTIME_ERROR, out, detail);
+            return new CExecutionResult(CExecutionResult.Kind.RUNTIME_ERROR, out, detail, ExecutionBackend.DOCKER);
         }
-        return new CExecutionResult(CExecutionResult.Kind.OK, out, err);
+        return new CExecutionResult(CExecutionResult.Kind.OK, out, err, ExecutionBackend.DOCKER);
     }
 
     private static String readIfExists(Path p) throws IOException {

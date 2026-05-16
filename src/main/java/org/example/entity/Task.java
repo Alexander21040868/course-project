@@ -2,6 +2,8 @@ package org.example.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "tasks")
@@ -14,7 +16,7 @@ public class Task {
     @Column(nullable = false, length = 200)
     private String title;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     private String description;
 
     @Enumerated(EnumType.STRING)
@@ -24,7 +26,7 @@ public class Task {
     @Column(name = "xp_reward", nullable = false)
     private int xpReward = 10;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     @Column(name = "template_code")
     private String templateCode;
 

@@ -1,6 +1,8 @@
 package org.example.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "articles")
@@ -13,7 +15,7 @@ public class Article {
     @Column(nullable = false, length = 200)
     private String title;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     @Column(nullable = false)
     private String content;
 

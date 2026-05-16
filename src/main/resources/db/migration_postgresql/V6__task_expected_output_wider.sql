@@ -1,0 +1,1 @@
+ALTER TABLE tasks ALTER COLUMN expected_output TYPE VARCHAR(10000);
