@@ -29,11 +29,19 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/h2/**").permitAll()
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers(
                     "/", "/index.html", "/app.html",
                     "/css/**", "/js/**", "/favicon.ico"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/lessons/**", "/api/tasks/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/challenges/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/leaderboard").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/daily-task").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/articles", "/api/articles/**").authenticated()
+                .requestMatchers("/api/notifications/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/ai/hint").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/challenges/*/join").authenticated()
                 .requestMatchers("/api/admin/**").hasRole("TEACHER")
                 .anyRequest().authenticated()
             )

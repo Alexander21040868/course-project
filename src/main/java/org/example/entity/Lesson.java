@@ -2,6 +2,8 @@ package org.example.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "lessons")
@@ -17,7 +19,7 @@ public class Lesson {
     @Column(length = 1000)
     private String description;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     private String content;
 
     @Column(name = "order_index", nullable = false)

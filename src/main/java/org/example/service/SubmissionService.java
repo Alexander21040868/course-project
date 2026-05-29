@@ -1,32 +1,49 @@
 package org.example.service;
 
-import org.example.dto.AchievementDto;
-import org.example.dto.SubmissionRequest;
-import org.example.dto.SubmissionResponse;
+import org.example.dto.*;
 import org.example.entity.*;
-import org.example.repository.SubmissionRepository;
-import org.example.repository.TaskRepository;
-import org.example.repository.UserRepository;
+import org.example.repository.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class SubmissionService {
 
+    private static final Logger log = LoggerFactory.getLogger(SubmissionService.class);
+
     private final SubmissionRepository submissionRepo;
     private final TaskRepository taskRepo;
     private final UserRepository userRepo;
+    private final TestCaseRepository testCaseRepo;
     private final GamificationService gamificationService;
+    private final DockerCExecutionService cExec;
+    private final DailyTaskService dailyTaskService;
+    private final TaskService taskService;
+    private final ChallengeService challengeService;
 
     public SubmissionService(SubmissionRepository submissionRepo, TaskRepository taskRepo,
-                             UserRepository userRepo, GamificationService gamificationService) {
+                             UserRepository userRepo, TestCaseRepository testCaseRepo,
+                             GamificationService gamificationService,
+                             DockerCExecutionService cExec,
+                             DailyTaskService dailyTaskService,
+                             TaskService taskService,
+                             ChallengeService challengeService) {
         this.submissionRepo = submissionRepo;
         this.taskRepo = taskRepo;
         this.userRepo = userRepo;
+        this.testCaseRepo = testCaseRepo;
         this.gamificationService = gamificationService;
+        this.cExec = cExec;
+        this.dailyTaskService = dailyTaskService;
+        this.taskService = taskService;
+        this.challengeService = challengeService;
     }
 
     @Transactional
@@ -35,6 +52,7 @@ public class SubmissionService {
                 .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
         Task task = taskRepo.findById(req.taskId())
                 .orElseThrow(() -> new IllegalArgumentException("Задача не найдена"));
+        taskService.assertCanSubmit(task, user);
 
         boolean alreadySolved = submissionRepo.existsByUserIdAndTaskIdAndStatus(
                 user.getId(), task.getId(), SubmissionStatus.CORRECT);
@@ -44,72 +62,190 @@ public class SubmissionService {
         sub.setTask(task);
         sub.setCode(req.code());
 
-        String result = checkSolution(req.code(), task);
-        boolean correct = "OK".equals(result);
+        List<TestCase> testCases = testCaseRepo.findByTaskIdOrderByOrderIndexAsc(task.getId());
+        List<TestResultDto> testResults = new ArrayList<>();
+        int passed = 0;
+        int total;
+        ExecutionBackend codeSandboxBackend = null;
 
+        if (!testCases.isEmpty()) {
+            total = testCases.size();
+            for (int i = 0; i < testCases.size(); i++) {
+                TestCase tc = testCases.get(i);
+                TestEval ev = evaluateAgainstTest(req.code(), tc);
+                if (codeSandboxBackend == null && ev.sandboxBackend() != null) {
+                    codeSandboxBackend = ev.sandboxBackend();
+                }
+                if (ev.passed()) {
+                    passed++;
+                }
+                testResults.add(new TestResultDto(
+                        i + 1, ev.passed(),
+                        tc.isSample() ? tc.getInput() : null,
+                        tc.isSample() ? tc.getExpectedOutput() : null,
+                        tc.isSample() && !ev.passed() ? shorten(ev.detail(), 600) : null,
+                        tc.isSample()
+                ));
+            }
+        } else {
+            total = 1;
+            TestEval ev = evaluateLegacy(req.code(), task);
+            codeSandboxBackend = ev.sandboxBackend();
+            if (ev.passed()) {
+                passed = 1;
+            }
+            testResults.add(new TestResultDto(
+                    1, ev.passed(), null, task.getExpectedOutput(),
+                    !ev.passed() ? shorten(ev.detail(), 600) : null, true));
+        }
+
+        boolean correct = passed == total;
         sub.setStatus(correct ? SubmissionStatus.CORRECT : SubmissionStatus.WRONG);
-        sub.setOutput(correct ? "Верно! Отличная работа." : result);
+
+        String output = correct
+                ? "Все тесты пройдены! Отличная работа."
+                : "Пройдено " + passed + " из " + total + " тестов.";
+        sub.setOutput(output);
         submissionRepo.save(sub);
 
         int xpEarned = 0;
         List<AchievementDto> newAchievements = new ArrayList<>();
-
-        if (correct && !alreadySolved) {
-            xpEarned = gamificationService.addXp(user, task.getXpReward());
-            newAchievements = gamificationService.checkAndGrantAchievements(user);
+        if (correct) {
+            gamificationService.updateStreak(user);
+            if (!alreadySolved) {
+                int reward = task.getXpReward();
+                if (dailyTaskService.isDailyTask(task.getId())) {
+                    reward *= 2;
+                }
+                reward += challengeService.challengeBonusShareForFirstSolve(task, user);
+                xpEarned = gamificationService.addXp(user, reward);
+                newAchievements = gamificationService.checkAndGrantAchievements(user);
+            }
         }
 
+        log.info("User {} submitted task #{}: {} ({}/{} tests) +{} XP; [cq-sandbox] codeSandbox={}",
+                username, req.taskId(), sub.getStatus(), passed, total, xpEarned,
+                codeSandboxBackend != null ? codeSandboxBackend.name() : "none");
+
         return new SubmissionResponse(
-                sub.getId(), sub.getStatus().name(), sub.getOutput(),
-                xpEarned, newAchievements, sub.getSubmittedAt()
+                sub.getId(), sub.getStatus().name(), output,
+                xpEarned, passed, total, testResults,
+                newAchievements, sub.getSubmittedAt(),
+                codeSandboxBackend != null ? codeSandboxBackend.name() : null
         );
     }
 
-    /**
-     * Простая проверка: сравниваем вывод программы с ожидаемым.
-     * В реальном проекте здесь была бы компиляция и запуск C-кода в песочнице.
-     */
-    private String checkSolution(String code, Task task) {
-        if (task.getExpectedOutput() == null || task.getExpectedOutput().isBlank()) {
-            return code.isBlank() ? "Пустое решение" : "OK";
-        }
-
-        String expected = task.getExpectedOutput().trim();
-        String normalizedCode = code.trim();
-
-        if (normalizedCode.isEmpty()) {
-            return "Пустое решение — напишите код!";
-        }
-
-        if (!normalizedCode.contains("main")) {
-            return "Ошибка: не найдена функция main()";
-        }
-
-        if (containsExpectedLogic(normalizedCode, expected)) {
-            return "OK";
-        }
-
-        return "Неверный ответ. Ожидаемый вывод: " + expected;
+    @Transactional(readOnly = true)
+    public List<SubmissionHistoryDto> getTaskHistory(Long taskId, String username) {
+        User user = userRepo.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден"));
+        taskService.requireTaskForLearner(taskId, username);
+        return submissionRepo.findByUserIdAndTaskIdOrderBySubmittedAtDesc(user.getId(), taskId)
+                .stream()
+                .map(s -> new SubmissionHistoryDto(s.getId(), s.getTask().getTitle(),
+                        s.getStatus().name(), s.getOutput(), s.getCode(), s.getSubmittedAt()))
+                .toList();
     }
 
-    private boolean containsExpectedLogic(String code, String expected) {
-        String cleaned = expected.replace("\\n", "\n").trim();
-        for (String line : cleaned.split("\n")) {
-            String trimmed = line.trim();
-            if (!trimmed.isEmpty() && code.contains(trimmed)) {
-                return true;
-            }
+    private record TestEval(boolean passed, String detail, ExecutionBackend sandboxBackend) {}
+
+    private TestEval evaluateAgainstTest(String code, TestCase tc) {
+        String expectedRaw = tc.getExpectedOutput();
+        if (expectedRaw == null || expectedRaw.isBlank()) {
+            return new TestEval(false, "У теста пустой ожидаемый вывод.", null);
+        }
+        String c = code == null ? "" : code.trim();
+        if (c.isEmpty() || !c.contains("main")) {
+            return new TestEval(false, "Нужен непустой код с функцией main.", null);
         }
 
-        if (code.contains("printf") || code.contains("puts") || code.contains("cout")) {
-            String[] keywords = expected.split("\\s+");
-            int matches = 0;
-            for (String kw : keywords) {
-                if (code.contains(kw)) matches++;
-            }
-            return matches >= keywords.length / 2 + 1;
+        String expected = normalizeText(expectedRaw);
+        String stdin = ensureTrailingNewline(normalizeText(tc.getInput()));
+        CExecutionResult r = cExec.compileAndRun(c, stdin);
+        return mapExecutionToEval(r, expected);
+    }
+
+    private TestEval evaluateLegacy(String code, Task task) {
+        String expectedRaw = task.getExpectedOutput();
+        if (expectedRaw == null || expectedRaw.isBlank()) {
+            return new TestEval(false, "Нет тест-кейсов и не задан expected output у задачи.", null);
+        }
+        String c = code == null ? "" : code.trim();
+        if (c.isEmpty() || !c.contains("main")) {
+            return new TestEval(false, "Нужен непустой код с функцией main.", null);
         }
 
-        return false;
+        String expected = normalizeText(expectedRaw);
+        CExecutionResult r = cExec.compileAndRun(c, "");
+        return mapExecutionToEval(r, expected);
+    }
+
+    private static TestEval mapExecutionToEval(CExecutionResult r, String expected) {
+        ExecutionBackend b = r.sandboxBackend();
+        return switch (r.kind()) {
+            case DISABLED, DOCKER_ERROR -> new TestEval(false, r.stderrOrCompileLog(), b);
+            case COMPILE_ERROR -> new TestEval(false, "Компиляция:\n" + shorten(r.stderrOrCompileLog(), 1200), b);
+            case TIMEOUT -> new TestEval(false, r.stderrOrCompileLog(), b);
+            case RUNTIME_ERROR -> new TestEval(false,
+                    "Ошибка выполнения (код/сигнал). stderr:\n"
+                            + shorten(r.stderrOrCompileLog(), 600)
+                            + "\nstdout:\n" + shorten(r.stdout(), 400), b);
+            case OK -> {
+                if (normalizedMatch(r.stdout(), expected)) {
+                    yield new TestEval(true, null, b);
+                }
+                yield new TestEval(false,
+                        "Получено:\n" + normalizeOut(r.stdout()) + "\nОжидалось:\n" + normalizeOut(expected), b);
+            }
+        };
+    }
+
+    private static String normalizeText(String s) {
+        if (s == null) return "";
+        return s
+                .replace("\\r\\n", "\n")
+                .replace("\\n", "\n")
+                .replace("\\t", "\t")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
+    }
+
+    private static String ensureTrailingNewline(String s) {
+        if (s.isEmpty()) return s;
+        return s.endsWith("\n") ? s : s + "\n";
+    }
+
+    private static String normalizeOut(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.replace("\r\n", "\n").replace('\r', '\n').strip();
+    }
+
+    private static boolean normalizedMatch(String actual, String expected) {
+        String a = normalizeOut(actual);
+        String e = normalizeOut(expected);
+        if (a.equals(e)) {
+            return true;
+        }
+        return normalizeLines(a).equals(normalizeLines(e));
+    }
+
+    private static String normalizeLines(String s) {
+        if (s == null || s.isEmpty()) {
+            return "";
+        }
+        return Arrays.stream(s.split("\n", -1))
+                .map(String::strip)
+                .collect(Collectors.joining("\n"))
+                .strip();
+    }
+
+    private static String shorten(String s, int max) {
+        if (s == null) {
+            return "";
+        }
+        String t = s.strip();
+        return t.length() <= max ? t : t.substring(0, max) + "…";
     }
 }

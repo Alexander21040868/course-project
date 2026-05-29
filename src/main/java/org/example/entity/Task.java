@@ -1,6 +1,9 @@
 package org.example.entity;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "tasks")
@@ -10,14 +13,10 @@ public class Task {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "lesson_id", nullable = false)
-    private Lesson lesson;
-
     @Column(nullable = false, length = 200)
     private String title;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     private String description;
 
     @Enumerated(EnumType.STRING)
@@ -27,23 +26,24 @@ public class Task {
     @Column(name = "xp_reward", nullable = false)
     private int xpReward = 10;
 
-    @Lob
+    @JdbcTypeCode(SqlTypes.MATERIALIZED_CLOB)
     @Column(name = "template_code")
     private String templateCode;
 
-    @Column(name = "expected_output", length = 2000)
+    @Column(name = "expected_output", length = 10000)
     private String expectedOutput;
 
     @Column(length = 2000)
     private String hints;
 
-    @Column(name = "order_index", nullable = false)
-    private int orderIndex;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "author_id")
+    private User author;
+
+    @Column(name = "catalog_visible_from")
+    private LocalDateTime catalogVisibleFrom;
 
     public Long getId() { return id; }
-
-    public Lesson getLesson() { return lesson; }
-    public void setLesson(Lesson lesson) { this.lesson = lesson; }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -66,6 +66,11 @@ public class Task {
     public String getHints() { return hints; }
     public void setHints(String hints) { this.hints = hints; }
 
-    public int getOrderIndex() { return orderIndex; }
-    public void setOrderIndex(int orderIndex) { this.orderIndex = orderIndex; }
+    public User getAuthor() { return author; }
+    public void setAuthor(User author) { this.author = author; }
+
+    public LocalDateTime getCatalogVisibleFrom() { return catalogVisibleFrom; }
+    public void setCatalogVisibleFrom(LocalDateTime catalogVisibleFrom) {
+        this.catalogVisibleFrom = catalogVisibleFrom;
+    }
 }

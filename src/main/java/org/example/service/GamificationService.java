@@ -6,6 +6,10 @@ import org.example.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,15 +20,33 @@ public class GamificationService {
     private final AchievementRepository achievementRepo;
     private final UserAchievementRepository userAchievementRepo;
     private final SubmissionRepository submissionRepo;
+    private final TaskRepository taskRepo;
+    private final LessonRepository lessonRepo;
+    private final LessonTaskRepository lessonTaskRepo;
+    private final NotificationService notificationService;
+    private final TaskVisibilityService taskVisibility;
+    private final Clock clock;
 
     public GamificationService(UserRepository userRepo,
                                AchievementRepository achievementRepo,
                                UserAchievementRepository userAchievementRepo,
-                               SubmissionRepository submissionRepo) {
+                               SubmissionRepository submissionRepo,
+                               TaskRepository taskRepo,
+                               LessonRepository lessonRepo,
+                               LessonTaskRepository lessonTaskRepo,
+                               NotificationService notificationService,
+                               TaskVisibilityService taskVisibility,
+                               Clock clock) {
         this.userRepo = userRepo;
         this.achievementRepo = achievementRepo;
         this.userAchievementRepo = userAchievementRepo;
         this.submissionRepo = submissionRepo;
+        this.taskRepo = taskRepo;
+        this.lessonRepo = lessonRepo;
+        this.lessonTaskRepo = lessonTaskRepo;
+        this.notificationService = notificationService;
+        this.taskVisibility = taskVisibility;
+        this.clock = clock;
     }
 
     @Transactional
@@ -37,14 +59,64 @@ public class GamificationService {
 
     @Transactional
     public List<AchievementDto> checkAndGrantAchievements(User user) {
-        List<AchievementDto> newlyEarned = new ArrayList<>();
-        long solvedCount = submissionRepo.countDistinctTaskByUserIdAndStatus(user.getId(), SubmissionStatus.CORRECT);
+        List<AchievementDto> earned = new ArrayList<>();
+        long solved = submissionRepo.countDistinctTaskByUserIdAndStatus(user.getId(), SubmissionStatus.CORRECT);
 
-        tryGrant(user, "FIRST_BLOOD", solvedCount >= 1, newlyEarned);
-        tryGrant(user, "SOLVER_10", solvedCount >= 10, newlyEarned);
-        tryGrant(user, "SOLVER_50", solvedCount >= 50, newlyEarned);
+        tryGrant(user, "FIRST_BLOOD", solved >= 1, earned);
+        tryGrant(user, "SOLVER_10",   solved >= 10, earned);
+        tryGrant(user, "SOLVER_50",   solved >= 50, earned);
 
-        return newlyEarned;
+        long totalEasy = taskRepo.countReleasedByDifficulty(Difficulty.EASY, LocalDateTime.now());
+        long solvedEasy = submissionRepo.findByUserIdOrderBySubmittedAtDesc(user.getId()).stream()
+                .filter(s -> s.getStatus() == SubmissionStatus.CORRECT
+                        && s.getTask().getDifficulty() == Difficulty.EASY)
+                .map(s -> s.getTask().getId()).distinct().count();
+        tryGrant(user, "ALL_EASY", totalEasy > 0 && solvedEasy >= totalEasy, earned);
+
+        tryGrant(user, "LESSON_CLEAR", hasAnyLessonCleared(user.getId()), earned);
+
+        LocalTime now = LocalTime.now(clock);
+        boolean isNight = now.getHour() >= 0 && now.getHour() < 5;
+        if (isNight) tryGrant(user, "SPEEDRUN", true, earned);
+
+        return earned;
+    }
+
+    private boolean hasAnyLessonCleared(Long userId) {
+        User user = userRepo.findById(userId).orElse(null);
+        if (user == null) return false;
+        LocalDateTime now = LocalDateTime.now();
+        for (Lesson lesson : lessonRepo.findAll()) {
+            var links = lessonTaskRepo.findByLessonIdOrderByOrderIndexAsc(lesson.getId());
+            if (links.isEmpty()) continue;
+            var visible = links.stream()
+                    .map(LessonTask::getTask)
+                    .filter(t -> taskVisibility.canView(t, user, now, lesson))
+                    .toList();
+            if (visible.isEmpty()) continue;
+            boolean allSolved = visible.stream().allMatch(t ->
+                    submissionRepo.existsByUserIdAndTaskIdAndStatus(userId, t.getId(), SubmissionStatus.CORRECT));
+            if (allSolved) return true;
+        }
+        return false;
+    }
+
+    @Transactional
+    public void updateStreak(User user) {
+        LocalDate today = LocalDate.now();
+        LocalDate last = user.getLastSolvedDate();
+
+        if (last == null || last.isBefore(today.minusDays(1))) {
+            user.setStreak(1);
+        } else if (last.equals(today.minusDays(1))) {
+            user.setStreak(user.getStreak() + 1);
+        }
+
+        if (user.getStreak() > user.getMaxStreak()) {
+            user.setMaxStreak(user.getStreak());
+        }
+        user.setLastSolvedDate(today);
+        userRepo.save(user);
     }
 
     public int calculateLevel(int xp) {
@@ -75,6 +147,8 @@ public class GamificationService {
                 ua.setUser(user);
                 ua.setAchievement(achievement);
                 userAchievementRepo.save(ua);
+                notificationService.notifyUser(user.getId(), "Новое достижение",
+                        achievement.getName() + " — " + (achievement.getDescription() != null ? achievement.getDescription() : ""));
 
                 addXp(user, achievement.getXpReward());
                 result.add(new AchievementDto(
